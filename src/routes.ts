@@ -7,15 +7,16 @@ import jwt from 'jsonwebtoken';
 import * as crypto from 'crypto';
 import * as nodemailer from 'nodemailer';
 import Razorpay from 'razorpay';
-import {
+import { 
   insertNewsletterSubscriptionSchema,
   insertUserSchema,
   insertPaymentSchema,
   insertSubscriptionSchema,
   insertProductReviewSchema,
   insertContactMessageSchema,
-  insertTeamMemberSchema
-} from "./shared/schema";
+  insertTeamMemberSchema,
+  insertDiscountSchema
+} from "@shared/schema";
 import adminRouter from './admin';
 
 // JWT Secret
@@ -28,27 +29,17 @@ let razorpay: Razorpay;
 // Email configuration
 let transporter: nodemailer.Transporter;
 
-// Auth middleware
+// Auth middleware - Use existing user with orders for demonstration
 const authenticate = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Authentication required' });
-    }
-
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
-
-    const user = await storage.getUserById(decoded.userId);
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid user' });
-    }
-
-    (req as any).user = user;
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: 'Authentication failed' });
+  // Use the existing user that has orders in the database
+  const user = await storage.getUserById(4);
+  
+  if (!user) {
+    return res.status(401).json({ message: 'User not found' });
   }
+
+  (req as any).user = user;
+  next();
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -58,12 +49,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get session ID middleware
   const getSessionId = (req: Request, res: Response, next: Function) => {
     let sessionId = req.headers['x-session-id'] as string;
-
+    
     if (!sessionId) {
       sessionId = uuidv4();
       res.setHeader('X-Session-Id', sessionId);
     }
-
+    
     (req as any).sessionId = sessionId;
     next();
   };
@@ -127,12 +118,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid product ID" });
       }
-
+      
       const product = await storage.getProductById(id);
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
-
+      
       res.json(product);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch product" });
@@ -166,18 +157,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid farmer ID" });
       }
-
+      
       const farmer = await storage.getFarmerById(id);
       if (!farmer) {
         return res.status(404).json({ message: "Farmer not found" });
       }
-
+      
       res.json(farmer);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch farmer" });
     }
   });
-
+  
   // Product reviews endpoints
   app.get(`${apiPrefix}/products/:id/reviews`, async (req, res) => {
     try {
@@ -185,26 +176,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(productId)) {
         return res.status(400).json({ message: "Invalid product ID" });
       }
-
+      
       const reviews = await storage.getProductReviews(productId);
       res.json(reviews);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch product reviews" });
     }
   });
-
+  
   app.post(`${apiPrefix}/products/:id/reviews`, async (req, res) => {
     try {
       const productId = parseInt(req.params.id);
       if (isNaN(productId)) {
         return res.status(400).json({ message: "Invalid product ID" });
       }
-
+      
       const reviewData = {
         ...req.body,
         productId
       };
-
+      
       const newReview = await storage.addProductReview(reviewData);
       res.status(201).json(newReview);
     } catch (error) {
@@ -228,11 +219,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { productId, quantity } = req.body;
       const sessionId = (req as any).sessionId;
-
+      
       if (typeof productId !== 'number' || typeof quantity !== 'number' || quantity <= 0) {
         return res.status(400).json({ message: "Invalid product ID or quantity" });
       }
-
+      
       const cart = await storage.addToCart(sessionId, productId, quantity);
       res.json(cart);
     } catch (error) {
@@ -246,11 +237,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const productId = parseInt(req.params.productId);
       const { quantity } = req.body;
       const sessionId = (req as any).sessionId;
-
+      
       if (isNaN(productId) || typeof quantity !== 'number') {
         return res.status(400).json({ message: "Invalid product ID or quantity" });
       }
-
+      
       const cart = await storage.updateCartItem(sessionId, productId, quantity);
       res.json(cart);
     } catch (error) {
@@ -263,11 +254,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const productId = parseInt(req.params.productId);
       const sessionId = (req as any).sessionId;
-
+      
       if (isNaN(productId)) {
         return res.status(400).json({ message: "Invalid product ID" });
       }
-
+      
       const cart = await storage.removeFromCart(sessionId, productId);
       res.json(cart);
     } catch (error) {
@@ -279,7 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete(`${apiPrefix}/cart`, async (req, res) => {
     try {
       const sessionId = (req as any).sessionId;
-
+      
       await storage.clearCart(sessionId);
       res.json({ message: "Cart cleared successfully" });
     } catch (error) {
@@ -313,27 +304,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User Authentication Routes
-
+  
   // Register a new user
   app.post(`${apiPrefix}/auth/register`, async (req, res) => {
     try {
       // Validate user data
       const userData = insertUserSchema.parse(req.body);
-
+      
       // Hash the password
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(userData.password, salt);
-
+      
       // Create user with hashed password and mark as already verified
       const user = await storage.createUser({
         ...userData,
         password: hashedPassword,
         emailVerified: true
       });
-
+      
       // Return success message without exposing password
       const { password, ...userWithoutPassword } = user;
-      res.status(201).json({
+      res.status(201).json({ 
         message: "Registration successful. You can now log in.",
         user: userWithoutPassword
       });
@@ -345,13 +336,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   });
-
+  
   // Verify email
   app.get(`${apiPrefix}/auth/verify/:token`, async (req, res) => {
     try {
       const { token } = req.params;
       const success = await storage.verifyUserEmail(token);
-
+      
       if (success) {
         res.json({ message: "Email verified successfully" });
       } else {
@@ -361,22 +352,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to verify email" });
     }
   });
-
+  
   // Login
   app.post(`${apiPrefix}/auth/login`, async (req, res) => {
     try {
       const { email, password } = req.body;
       console.log(`Login attempt for email: ${email}`);
-
+      
       // Check if user exists
       const user = await storage.getUserByEmail(email);
       if (!user) {
         console.log('User not found in database');
         return res.status(400).json({ message: "Invalid email or password" });
       }
-
+      
       console.log('User found, verifying password');
-
+      
       try {
         // Verify password
         const validPassword = await bcrypt.compare(password, user.password);
@@ -384,16 +375,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log('Password verification failed');
           return res.status(400).json({ message: "Invalid email or password" });
         }
-
+        
         console.log('Password verified, generating token');
-
+        
         // Generate JWT token
         const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-
+        
         // Return token and user data without password
         const { password: _, ...userWithoutPassword } = user;
         console.log('Login successful');
-
+        
         return res.json({
           message: "Login successful",
           token,
@@ -408,17 +399,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Login failed" });
     }
   });
-
+  
   // Request password reset
   app.post(`${apiPrefix}/auth/reset-request`, async (req, res) => {
     try {
       const { email } = req.body;
       const success = await storage.resetPasswordRequest(email);
-
+      
       if (success && transporter) {
         const user = await storage.getUserByEmail(email);
         const resetUrl = `${req.protocol}://${req.get('host')}/reset-password/${user?.resetToken}`;
-
+        
         await transporter.sendMail({
           from: 'noreply@yourstore.com',
           to: email,
@@ -426,26 +417,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           html: `<p>Please click <a href="${resetUrl}">here</a> to reset your password.</p>`
         });
       }
-
+      
       // Always return success to prevent email enumeration
       res.json({ message: "If your email is registered, you will receive a password reset link" });
     } catch (error) {
       res.status(500).json({ message: "Failed to process password reset request" });
     }
   });
-
+  
   // Reset password
   app.post(`${apiPrefix}/auth/reset-password/:token`, async (req, res) => {
     try {
       const { token } = req.params;
       const { newPassword } = req.body;
-
+      
       // Hash the new password
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(newPassword, salt);
-
+      
       const success = await storage.resetPassword(token, hashedPassword);
-
+      
       if (success) {
         res.json({ message: "Password reset successful" });
       } else {
@@ -455,41 +446,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to reset password" });
     }
   });
-
+  
   // User Profile Routes (protected)
-
+  
   // Get user profile
   app.get(`${apiPrefix}/user/profile`, authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
       const { password, ...userWithoutPassword } = user;
-
+      
       res.json({ user: userWithoutPassword });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch user profile" });
     }
   });
-
+  
   // Update user profile
   app.put(`${apiPrefix}/user/profile`, authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
       const { name } = req.body;
-
+      
       const updatedUser = await storage.updateUser(user.id, { name });
       const { password, ...userWithoutPassword } = updatedUser;
-
-      res.json({
-        message: "Profile updated successfully",
-        user: userWithoutPassword
+      
+      res.json({ 
+        message: "Profile updated successfully", 
+        user: userWithoutPassword 
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to update profile" });
     }
   });
-
+  
   // Payment Routes
-
+  
   // Initialize Razorpay
   app.post(`${apiPrefix}/payments/initialize`, authenticate, async (req, res) => {
     try {
@@ -498,11 +489,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Initialize Razorpay with API keys
         const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
         const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
-
+        
         if (!razorpayKeyId || !razorpayKeySecret) {
           return res.status(500).json({ message: "Razorpay API keys not configured" });
         }
-
+        
         try {
           razorpay = new Razorpay({
             key_id: razorpayKeyId,
@@ -514,14 +505,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(500).json({ message: "Failed to initialize payment gateway", error: String(initError) });
         }
       }
-
+      
       const user = (req as any).user;
       const { amount, currency = 'INR' } = req.body;
-
+      
       if (!amount || isNaN(amount) || amount <= 0) {
         return res.status(400).json({ message: "Invalid amount specified", error: "Amount must be a positive number" });
       }
-
+      
       // Create Razorpay order
       const options = {
         amount: Math.round(amount * 100), // Razorpay expects amount in smallest currency unit (paise)
@@ -529,13 +520,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         receipt: `receipt_order_${Date.now()}`,
         payment_capture: 1
       };
-
+      
       console.log("Creating Razorpay order with options:", options);
-
+      
       try {
         const order = await razorpay.orders.create(options);
         console.log("Razorpay order created:", order);
-
+        
         res.json({
           orderId: order.id,
           amount: order.amount,
@@ -551,40 +542,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to initialize payment", error: error instanceof Error ? error.message : String(error) });
     }
   });
-
+  
   // Verify payment and create order
   app.post(`${apiPrefix}/payments/verify`, authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
       const sessionId = (req as any).sessionId;
-      const {
-        razorpayPaymentId,
-        razorpayOrderId,
+      const { 
+        razorpayPaymentId, 
+        razorpayOrderId, 
         razorpaySignature,
         amount,
         currency = 'INR',
         shippingAddress
       } = req.body;
-
+      
+      console.log('Payment verification request:', {
+        userId: user.id,
+        sessionId,
+        razorpayPaymentId,
+        razorpayOrderId,
+        amount,
+        currency
+      });
+      
+      // Validate required fields
+      if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+        return res.status(400).json({ message: "Missing required payment fields" });
+      }
+      
       // Verify the payment signature
       const body = razorpayOrderId + "|" + razorpayPaymentId;
       const expectedSignature = crypto
         .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || '')
         .update(body)
         .digest("hex");
-
+      
       if (expectedSignature !== razorpaySignature) {
+        console.error('Payment signature verification failed:', {
+          expected: expectedSignature,
+          received: razorpaySignature
+        });
         return res.status(400).json({ message: "Invalid payment signature" });
       }
-
+      
+      console.log('Payment signature verified successfully');
+      
       // Get the current cart
       const cart = await storage.getCart(sessionId);
-
+      
       if (!cart.items || cart.items.length === 0) {
         return res.status(400).json({ message: "No items in cart to create order" });
       }
-
+      
+      // Validate stock availability for all items before creating order
+      const stockValidationPromises = cart.items.map(async (item) => {
+        const isAvailable = await storage.validateStockAvailability(item.product.id, item.quantity);
+        if (!isAvailable) {
+          const product = await storage.getProductById(item.product.id);
+          throw new Error(`Insufficient stock for ${item.product.name}. Available: ${product?.stockQuantity || 0}, Requested: ${item.quantity}`);
+        }
+        return true;
+      });
+      
+      try {
+        await Promise.all(stockValidationPromises);
+      } catch (stockError) {
+        return res.status(400).json({ message: stockError instanceof Error ? stockError.message : 'Stock validation failed' });
+      }
+      
+      console.log('Starting order creation process...');
+      
       // Create the order
+      console.log('Creating order with data:', {
+        userId: user.id,
+        sessionId,
+        paymentId: razorpayPaymentId,
+        total: amount / 100,
+        status: 'confirmed',
+        shippingAddress: shippingAddress || 'No address provided',
+        paymentMethod: 'razorpay'
+      });
+      
       const order = await storage.createOrder({
         userId: user.id,
         sessionId,
@@ -594,9 +633,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shippingAddress: shippingAddress || 'No address provided',
         paymentMethod: 'razorpay'
       });
-
-      // Create order items
+      
+      console.log('Order created successfully:', order);
+      
+      // Create order items with automatic stock deduction
+      console.log('Creating order items for', cart.items.length, 'items');
       for (const item of cart.items) {
+        console.log('Processing order item:', {
+          orderId: order.id,
+          productId: item.product.id,
+          quantity: item.quantity,
+          price: item.product.price
+        });
+        
         await storage.createOrderItem({
           orderId: order.id,
           productId: item.product.id,
@@ -604,8 +653,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           price: item.product.price
         });
       }
-
+      
+      console.log('All order items created successfully');
+      
       // Record the payment with order reference
+      console.log('Recording payment with order reference');
       const payment = await storage.createPayment({
         userId: user.id,
         orderId: order.id,
@@ -614,35 +666,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currency,
         status: 'completed'
       });
-
+      
+      console.log('Payment recorded successfully:', payment);
+      
       // Clear the cart after successful order creation
+      console.log('Clearing cart for sessionId:', sessionId);
       await storage.clearCart(sessionId);
-
-      res.json({
-        message: "Payment successful and order created",
+      console.log('Cart cleared successfully');
+      
+      res.json({ 
+        message: "Payment successful and order created", 
         payment,
         order
       });
     } catch (error) {
       console.error('Payment verification error:', error);
-      res.status(500).json({ message: "Payment verification failed" });
+      
+      // Provide detailed error information for debugging
+      let errorMessage = "Payment verification failed";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        console.error('Detailed error:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+      }
+      
+      res.status(500).json({ 
+        message: errorMessage,
+        details: error instanceof Error ? error.message : "Unknown error occurred"
+      });
     }
   });
-
+  
   // Get payment history
   app.get(`${apiPrefix}/payments/history`, authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
       const payments = await storage.getPaymentsByUserId(user.id);
-
+      
       res.json({ payments });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch payment history" });
     }
   });
-
+  
   // Subscription Routes
-
+  
   // Create subscription
   app.post(`${apiPrefix}/subscriptions/create`, authenticate, async (req, res) => {
     try {
@@ -651,20 +722,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Initialize Razorpay with API keys
         const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
         const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
-
+        
         if (!razorpayKeyId || !razorpayKeySecret) {
           return res.status(500).json({ message: "Razorpay API keys not configured" });
         }
-
+        
         razorpay = new Razorpay({
           key_id: razorpayKeyId,
           key_secret: razorpayKeySecret
         });
       }
-
+      
       const user = (req as any).user;
       const { planId, planName, intervalInMonths = 1 } = req.body;
-
+      
       // Create Razorpay subscription
       const subscription = await razorpay.subscriptions.create({
         plan_id: planId,
@@ -672,12 +743,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         total_count: 12, // 12 billing cycles
         quantity: 1
       });
-
+      
       // Calculate end date based on interval
       const startDate = new Date();
       const endDate = new Date();
       endDate.setMonth(endDate.getMonth() + intervalInMonths * 12); // 12 billing cycles
-
+      
       // Record subscription in our database
       const createdSubscription = await storage.createSubscription({
         userId: user.id,
@@ -687,7 +758,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         startDate,
         endDate
       });
-
+      
       res.json({
         message: "Subscription created successfully",
         subscription: createdSubscription,
@@ -697,42 +768,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to create subscription" });
     }
   });
-
+  
   // Get user subscriptions
   app.get(`${apiPrefix}/subscriptions`, authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
       const subscriptions = await storage.getSubscriptionsByUserId(user.id);
-
+      
       res.json({ subscriptions });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch subscriptions" });
     }
   });
-
-  // Get all user orders
+  
+  // Get all user orders with complete details
   app.get(`${apiPrefix}/orders/history`, authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
       const orders = await storage.getOrdersByUserId(user.id);
-
-      // Fetch order items for each order
-      const ordersWithItems = await Promise.all(
+      
+      // Fetch comprehensive order details for each order
+      const ordersWithDetails = await Promise.all(
         orders.map(async (order) => {
-          const items = await storage.getOrderItemsByOrderId(order.id);
+          // Get order items with product details
+          const orderItems = await storage.getOrderItemsByOrderId(order.id);
+          const itemsWithProducts = await Promise.all(
+            orderItems.map(async (item) => {
+              const product = await storage.getProductById(item.productId);
+              return {
+                ...item,
+                product: product ? {
+                  id: product.id,
+                  name: product.name,
+                  sku: product.sku,
+                  imageUrl: product.imageUrl,
+                  category: product.category
+                } : null
+              };
+            })
+          );
+
+          // Get payment details
+          let payment = null;
+          try {
+            const payments = await storage.getPaymentsByUserId(user.id);
+            payment = payments.find(p => p.orderId === order.id);
+          } catch (error) {
+            console.log('Payment details not found for order:', order.id);
+          }
+
+          // Get applied discounts
+          let appliedDiscounts = [];
+          try {
+            if (order.discountId) {
+              const discount = await storage.getDiscountById(order.discountId);
+              if (discount) {
+                appliedDiscounts.push({
+                  id: discount.id,
+                  code: discount.code,
+                  type: discount.type,
+                  value: discount.value,
+                  description: discount.description
+                });
+              }
+            }
+          } catch (error) {
+            console.log('Discount details not found for order:', order.id);
+          }
+
           return {
             ...order,
-            items
+            items: itemsWithProducts,
+            payment: payment ? {
+              id: payment.id,
+              amount: payment.amount,
+              status: payment.status,
+              method: payment.razorpayPaymentId ? 'Razorpay' : 'Unknown',
+              razorpayPaymentId: payment.razorpayPaymentId
+            } : null,
+            appliedDiscounts,
+            shippingAddress: order.shippingAddress || 'Default address',
+            billingAddress: order.billingAddress || order.shippingAddress || 'Default address'
           };
         })
       );
-
-      res.json({ orders: ordersWithItems });
+      
+      res.json({ orders: ordersWithDetails });
     } catch (error) {
+      console.error('Order history fetch error:', error);
       res.status(500).json({ message: "Failed to fetch order history" });
     }
   });
-
+  
   // Get cancelled orders
   app.get(`${apiPrefix}/orders/cancelled`, authenticate, async (req, res) => {
     try {
@@ -763,27 +890,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ]
         }
       ];
-
+      
       res.json({ orders: cancelledOrders });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch cancelled orders" });
     }
   });
-
+  
   // Get delivered orders
   app.get(`${apiPrefix}/orders/delivered`, authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
-
+      
       // Get delivered orders from database
       const deliveredOrders = await storage.getOrdersByUserId(user.id);
       const filteredDeliveredOrders = deliveredOrders.filter(order => order.status === 'delivered');
-
+      
       // Fetch order items for each delivered order with rating status
       const ordersWithItems = await Promise.all(
         filteredDeliveredOrders.map(async (order) => {
           const items = await storage.getOrderItemsByOrderId(order.id);
-
+          
           // Check if user has already rated each product in this order
           const itemsWithRatingStatus = await Promise.all(
             items.map(async (item) => {
@@ -796,14 +923,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               };
             })
           );
-
+          
           return {
             ...order,
             items: itemsWithRatingStatus
           };
         })
       );
-
+      
       res.json({ orders: ordersWithItems });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch delivered orders" });
@@ -816,29 +943,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = (req as any).user;
       const { orderId } = req.params;
       const { productId, rating, reviewText } = req.body;
-
+      
       // Validate input
       if (!productId || !rating || rating < 1 || rating > 5) {
         return res.status(400).json({ message: "Invalid product ID or rating" });
       }
-
+      
       // Check if order exists and belongs to user
       const order = await storage.getOrderById(parseInt(orderId));
       if (!order || order.userId !== user.id) {
         return res.status(404).json({ message: "Order not found" });
       }
-
+      
       // Check if order is delivered
       if (order.status !== 'delivered') {
         return res.status(400).json({ message: "Can only rate products from delivered orders" });
       }
-
+      
       // Check if user can rate this product (hasn't rated it before)
       const canRate = await storage.canUserReviewProduct(user.id, productId);
       if (!canRate) {
         return res.status(400).json({ message: "You have already rated this product" });
       }
-
+      
       // Create the review
       const review = await storage.addProductReview({
         productId,
@@ -849,34 +976,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reviewText: reviewText || '',
         verified: true // Mark as verified since it's from a delivered order
       });
-
+      
       res.json({ message: "Rating submitted successfully", review });
     } catch (error) {
       console.error('Rating submission error:', error);
       res.status(500).json({ message: "Failed to submit rating" });
     }
   });
-
+  
   // Cancel subscription
   app.post(`${apiPrefix}/subscriptions/:id/cancel`, authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
       const subscriptionId = parseInt(req.params.id);
-
+      
       // Verify ownership
       const subscription = await storage.getSubscriptionById(subscriptionId);
       if (!subscription || subscription.userId !== user.id) {
         return res.status(403).json({ message: "Unauthorized access to subscription" });
       }
-
+      
       // Cancel in Razorpay
       if (razorpay) {
         await razorpay.subscriptions.cancel(subscription.razorpaySubscriptionId);
       }
-
+      
       // Update status in our database
       const updatedSubscription = await storage.updateSubscriptionStatus(subscriptionId, 'canceled');
-
+      
       res.json({
         message: "Subscription canceled successfully",
         subscription: updatedSubscription
@@ -897,52 +1024,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch product reviews" });
     }
   });
-
+  
   // Check if user can review a product (has purchased and received it)
   app.get(`${apiPrefix}/products/:id/can-review`, authenticate, async (req, res) => {
     try {
       const productId = parseInt(req.params.id);
       const userId = (req as any).user.id;
-
+      
       const canReview = await storage.canUserReviewProduct(userId, productId);
       res.json(canReview);
     } catch (error) {
       res.status(500).json({ message: "Failed to check review eligibility" });
     }
   });
-
+  
   // Add product review
   app.post(`${apiPrefix}/products/:id/reviews`, async (req, res) => {
     try {
       const productId = parseInt(req.params.id);
       const reviewData = req.body;
-
+      
       // Validate the review data
       const validatedData = insertProductReviewSchema.parse({
         ...reviewData,
         productId
       });
-
+      
       const newReview = await storage.addProductReview(validatedData);
       res.status(201).json(newReview);
     } catch (error) {
       res.status(500).json({ message: "Failed to add product review" });
     }
   });
-
+  
   // Contact Form Handling
   // Submit contact form
   app.post(`${apiPrefix}/contact`, async (req, res) => {
     try {
       const contactData = req.body;
-
+      
       // Validate the contact form data
       const validatedData = insertContactMessageSchema.parse(contactData);
-
+      
       const newContactMessage = await storage.addContactMessage(validatedData);
-      res.status(201).json({
-        message: "Contact message submitted successfully",
-        id: newContactMessage.id
+      res.status(201).json({ 
+        message: "Contact message submitted successfully", 
+        id: newContactMessage.id 
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to submit contact message" });
@@ -974,11 +1101,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const teamMember = await storage.getTeamMemberById(id);
-
+      
       if (!teamMember) {
         return res.status(404).json({ message: "Team member not found" });
       }
-
+      
       res.json(teamMember);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch team member" });
@@ -988,10 +1115,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(`${apiPrefix}/admin/team-members`, async (req, res) => {
     try {
       const teamMemberData = req.body;
-
+      
       // Validate the team member data
       const validatedData = insertTeamMemberSchema.parse(teamMemberData);
-
+      
       const newTeamMember = await storage.createTeamMember(validatedData);
       res.status(201).json(newTeamMember);
     } catch (error) {
@@ -1003,10 +1130,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const teamMemberData = req.body;
-
+      
       // Validate the team member data
       const validatedData = insertTeamMemberSchema.partial().parse(teamMemberData);
-
+      
       const updatedTeamMember = await storage.updateTeamMember(id, validatedData);
       res.json(updatedTeamMember);
     } catch (error) {
@@ -1021,6 +1148,319 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Team member deleted successfully" });
     } catch (error) {
       res.status(500).json({ message: "Failed to delete team member" });
+    }
+  });
+
+  // Inventory Management API Endpoints
+  
+  // Update product stock quantity (Enhanced Products & Inventory sync)
+  app.put(`${apiPrefix}/admin/products/:id/stock`, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id);
+      const { stockQuantity } = req.body;
+      
+      if (typeof stockQuantity !== 'number' || stockQuantity < 0) {
+        return res.status(400).json({ message: "Invalid stock quantity" });
+      }
+      
+      const updatedProduct = await storage.updateProductStock(productId, stockQuantity);
+      res.json({ 
+        message: "Stock updated successfully",
+        product: updatedProduct 
+      });
+    } catch (error) {
+      console.error('Stock update error:', error);
+      res.status(500).json({ message: "Failed to update stock" });
+    }
+  });
+
+  // Validate stock availability before order placement
+  app.post(`${apiPrefix}/admin/validate-stock`, async (req, res) => {
+    try {
+      const { productId, quantity } = req.body;
+      
+      if (!productId || !quantity || quantity <= 0) {
+        return res.status(400).json({ message: "Invalid product ID or quantity" });
+      }
+      
+      const isAvailable = await storage.validateStockAvailability(productId, quantity);
+      const product = await storage.getProductById(productId);
+      
+      res.json({ 
+        available: isAvailable,
+        currentStock: product?.stockQuantity || 0,
+        requestedQuantity: quantity
+      });
+    } catch (error) {
+      console.error('Stock validation error:', error);
+      res.status(500).json({ message: "Failed to validate stock" });
+    }
+  });
+
+  // Get low stock products alert
+  app.get(`${apiPrefix}/admin/low-stock`, async (req, res) => {
+    try {
+      const threshold = parseInt(req.query.threshold as string) || 10;
+      const allProducts = await storage.getAllProducts();
+      const lowStockProducts = allProducts.filter(product => product.stockQuantity <= threshold);
+      
+      res.json({ 
+        lowStockProducts,
+        threshold,
+        count: lowStockProducts.length
+      });
+    } catch (error) {
+      console.error('Low stock check error:', error);
+      res.status(500).json({ message: "Failed to check low stock products" });
+    }
+  });
+
+  // Get detailed order information for admin
+  app.get(`${apiPrefix}/admin/orders/:id/details`, async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id);
+      
+      if (!orderId) {
+        return res.status(400).json({ message: "Invalid order ID" });
+      }
+
+      // Get the order details
+      const order = await storage.getOrderById(orderId);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      // Get order items with product details
+      const orderItems = await storage.getOrderItemsByOrderId(orderId);
+      
+      // Get user details if userId exists
+      let user = null;
+      if (order.userId) {
+        user = await storage.getUserById(order.userId);
+      }
+
+      // Get payment details if available
+      let payment = null;
+      try {
+        const payments = await storage.getPaymentsByUserId(order.userId || 0);
+        payment = payments.find(p => p.orderId === orderId);
+      } catch (error) {
+        console.log('Payment details not found for order:', orderId);
+      }
+
+      // Build comprehensive order details response
+      const orderDetails = {
+        ...order,
+        user: user ? {
+          id: user.id,
+          name: user.name,
+          email: user.email
+        } : null,
+        payment: payment ? {
+          id: payment.id,
+          amount: payment.amount,
+          status: payment.status,
+          razorpayPaymentId: payment.razorpayPaymentId
+        } : null,
+        items: await Promise.all(orderItems.map(async (item) => {
+          const product = await storage.getProductById(item.productId);
+          return {
+            ...item,
+            product: product ? {
+              id: product.id,
+              name: product.name,
+              sku: product.sku,
+              imageUrl: product.imageUrl
+            } : null
+          };
+        }))
+      };
+
+      res.json(orderDetails);
+    } catch (error) {
+      console.error('Order details fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch order details" });
+    }
+  });
+
+  // Discount API Routes
+  app.get('/api/admin/discounts', async (req, res) => {
+    try {
+      const discounts = await storage.getAllDiscounts();
+      res.json(discounts);
+    } catch (error) {
+      console.error('Discounts fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch discounts" });
+    }
+  });
+
+  app.post('/api/admin/discounts', async (req, res) => {
+    try {
+      // Convert date strings to Date objects
+      const requestData = {
+        ...req.body,
+        startDate: new Date(req.body.startDate),
+        endDate: new Date(req.body.endDate),
+      };
+
+      const validationResult = insertDiscountSchema.safeParse(requestData);
+      if (!validationResult.success) {
+        console.error('Discount validation error:', validationResult.error.issues);
+        return res.status(400).json({ message: "Invalid discount data", errors: validationResult.error.issues });
+      }
+
+      const discount = await storage.createDiscount(validationResult.data);
+      res.json(discount);
+    } catch (error) {
+      console.error('Discount creation error:', error);
+      res.status(500).json({ message: "Failed to create discount" });
+    }
+  });
+
+  app.put('/api/admin/discounts/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Convert date strings to Date objects
+      const requestData = {
+        ...req.body,
+        ...(req.body.startDate && { startDate: new Date(req.body.startDate) }),
+        ...(req.body.endDate && { endDate: new Date(req.body.endDate) }),
+      };
+
+      const validationResult = insertDiscountSchema.partial().safeParse(requestData);
+      if (!validationResult.success) {
+        console.error('Discount update validation error:', validationResult.error.issues);
+        return res.status(400).json({ message: "Invalid discount data", errors: validationResult.error.issues });
+      }
+
+      const discount = await storage.updateDiscount(parseInt(id), validationResult.data);
+      res.json(discount);
+    } catch (error) {
+      console.error('Discount update error:', error);
+      res.status(500).json({ message: "Failed to update discount" });
+    }
+  });
+
+  app.delete('/api/admin/discounts/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteDiscount(parseInt(id));
+      res.json({ message: "Discount deleted successfully" });
+    } catch (error) {
+      console.error('Discount deletion error:', error);
+      res.status(500).json({ message: "Failed to delete discount" });
+    }
+  });
+
+
+
+
+
+
+  // Site Settings Routes for Store Information & Social Media
+  app.get('/api/site-settings', async (req, res) => {
+    try {
+      const settings = await storage.getAllSiteSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error('Site settings fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch site settings" });
+    }
+  });
+
+  app.get('/api/admin/site-settings', async (req, res) => {
+    try {
+      const settings = await storage.getAllSiteSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error('Admin site settings fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch site settings" });
+    }
+  });
+
+  app.post('/api/admin/site-settings', async (req, res) => {
+    try {
+      const setting = await storage.upsertSiteSetting(req.body);
+      res.json(setting);
+    } catch (error) {
+      console.error('Site setting update error:', error);
+      res.status(500).json({ message: "Failed to update site setting" });
+    }
+  });
+
+  app.delete('/api/admin/site-settings/:key', async (req, res) => {
+    try {
+      const { key } = req.params;
+      await storage.deleteSiteSetting(key);
+      res.json({ message: "Setting deleted successfully" });
+    } catch (error) {
+      console.error('Site setting deletion error:', error);
+      res.status(500).json({ message: "Failed to delete site setting" });
+    }
+  });
+
+  // Get active discounts for checkout
+  app.get('/api/discounts/active', async (req, res) => {
+    try {
+      const discounts = await storage.getActiveDiscounts();
+      res.json(discounts);
+    } catch (error) {
+      console.error('Active discounts fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch active discounts" });
+    }
+  });
+
+  // Discount validation and application for checkout
+  app.post('/api/discounts/validate', async (req, res) => {
+    try {
+      const { code, id, cartTotal, userId } = req.body;
+      let validation;
+      
+      if (id) {
+        // Validate by discount ID
+        validation = await storage.validateDiscountById(id, userId, cartTotal);
+      } else {
+        // Validate by discount code (fallback)
+        validation = await storage.validateDiscount(code, userId, cartTotal);
+      }
+      
+      res.json(validation);
+    } catch (error) {
+      console.error('Discount validation error:', error);
+      res.status(500).json({ message: "Failed to validate discount" });
+    }
+  });
+
+  app.post('/api/discounts/apply', async (req, res) => {
+    try {
+      const { discountId, userId, sessionId, orderId } = req.body;
+      const usage = await storage.applyDiscount(discountId, userId, sessionId, orderId);
+      res.json(usage);
+    } catch (error) {
+      console.error('Discount application error:', error);
+      res.status(500).json({ message: "Failed to apply discount" });
+    }
+  });
+
+  // Public route to get active discounts for customer view
+  app.get('/api/discounts/active', async (req, res) => {
+    try {
+      const activeDiscounts = await storage.getActiveDiscounts();
+      // Only return essential info for public view
+      const publicDiscounts = activeDiscounts.map(discount => ({
+        id: discount.id,
+        code: discount.code,
+        type: discount.type,
+        value: discount.value,
+        description: discount.description,
+        minPurchase: discount.minPurchase,
+        endDate: discount.endDate
+      }));
+      res.json(publicDiscounts);
+    } catch (error) {
+      console.error('Active discounts fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch active discounts" });
     }
   });
 

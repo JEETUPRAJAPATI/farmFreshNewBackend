@@ -153,7 +153,9 @@ export const orders = pgTable("orders", {
   total: doublePrecision("total").notNull(),
   status: text("status").notNull().default("pending"),
   shippingAddress: text("shipping_address").notNull(),
+  billingAddress: text("billing_address"),
   paymentMethod: text("payment_method").notNull().default("razorpay"),
+  discountId: integer("discount_id").references(() => discounts.id),
   cancellationReason: text("cancellation_reason"),
   deliveredAt: timestamp("delivered_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -336,11 +338,90 @@ export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({
 export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
 export type TeamMember = typeof teamMembers.$inferSelect;
 
+// Discounts/Coupons Schema
+export const discountTypeEnum = pgEnum('discount_type', ['percentage', 'fixed', 'shipping']);
+export const discountStatusEnum = pgEnum('discount_status', ['active', 'scheduled', 'expired', 'disabled']);
+
+export const discounts = pgTable("discounts", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  type: discountTypeEnum("type").notNull(),
+  value: doublePrecision("value").notNull(),
+  description: text("description").notNull(),
+  minPurchase: doublePrecision("min_purchase").default(0),
+  usageLimit: integer("usage_limit").default(0), // 0 means unlimited
+  perUser: boolean("per_user").default(false),
+  used: integer("used").default(0),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  status: discountStatusEnum("status").notNull().default('active'),
+  applicableProducts: text("applicable_products").default('all'), // 'all', 'selected', or JSON array
+  applicableCategories: text("applicable_categories").default('all'), // 'all' or comma-separated
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertDiscountSchema = createInsertSchema(discounts).omit({
+  id: true,
+  used: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  startDate: z.union([z.date(), z.string().transform((str) => new Date(str))]),
+  endDate: z.union([z.date(), z.string().transform((str) => new Date(str))]),
+});
+
+export type InsertDiscount = z.infer<typeof insertDiscountSchema>;
+export type Discount = typeof discounts.$inferSelect;
+
+// Discount Usage Tracking
+export const discountUsage = pgTable("discount_usage", {
+  id: serial("id").primaryKey(),
+  discountId: integer("discount_id").notNull().references(() => discounts.id),
+  userId: integer("user_id").references(() => users.id),
+  orderId: integer("order_id").references(() => orders.id),
+  sessionId: text("session_id"),
+  usedAt: timestamp("used_at").notNull().defaultNow(),
+});
+
+export const insertDiscountUsageSchema = createInsertSchema(discountUsage).omit({
+  id: true,
+  usedAt: true,
+});
+
+export type InsertDiscountUsage = z.infer<typeof insertDiscountUsageSchema>;
+export type DiscountUsage = typeof discountUsage.$inferSelect;
+
+// Site Settings Schema for store information and social media
+export const siteSettings = pgTable("site_settings", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value"),
+  type: text("type").notNull().default("text"), // text, image, json
+  description: text("description"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSiteSettingSchema = createInsertSchema(siteSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertSiteSetting = z.infer<typeof insertSiteSettingSchema>;
+export type SiteSetting = typeof siteSettings.$inferSelect;
+
+
+
 // Cart with items
 export interface CartWithItems extends Cart {
   items: (CartItem & { product: Product })[];
   totalItems: number;
   subtotal: number;
   shipping: number;
+  discount?: {
+    code: string;
+    amount: number;
+    type: string;
+  };
   total: number;
 }
