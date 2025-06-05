@@ -1,4 +1,4 @@
-import { Product, ProductCategory } from '@shared/schema';
+import { Product, ProductCategory } from './shared/schema';
 
 export const productData: Product[] = [
   {

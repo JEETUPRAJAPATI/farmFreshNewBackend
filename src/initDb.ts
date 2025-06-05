@@ -1,5 +1,5 @@
 import { db } from './db';
-import { products, farmers, testimonials, discounts, siteSettings, users, orders, orderItems, payments } from '@shared/schema';
+import { products, farmers, testimonials, discounts, siteSettings, users, orders, orderItems, payments } from './shared/schema';
 import { productData } from './productData';
 import { farmerData } from './farmerData';
 import { discountData } from './discountData';
@@ -11,31 +11,31 @@ import { sql } from 'drizzle-orm';
  */
 export async function initializeDatabase() {
   console.log('Initializing database with seed data...');
-  
+
   try {
     // Check if products already exist
     const existingProducts = await db.select({ count: sql`count(*)` }).from(products);
-    
+
     if (Number(existingProducts[0].count) === 0) {
       console.log('Adding products...');
       await db.insert(products).values(productData);
     } else {
       console.log(`Found ${existingProducts[0].count} existing products, skipping product seeding.`);
     }
-    
+
     // Check if farmers already exist
     const existingFarmers = await db.select({ count: sql`count(*)` }).from(farmers);
-    
+
     if (Number(existingFarmers[0].count) === 0) {
       console.log('Adding farmers...');
       await db.insert(farmers).values(farmerData);
     } else {
       console.log(`Found ${existingFarmers[0].count} existing farmers, skipping farmer seeding.`);
     }
-    
+
     // Add testimonials if they don't exist
     const existingTestimonials = await db.select({ count: sql`count(*)` }).from(testimonials);
-    
+
     if (Number(existingTestimonials[0].count) === 0) {
       console.log('Adding testimonials...');
       const testimonialsData = [
@@ -72,25 +72,25 @@ export async function initializeDatabase() {
           imageInitials: "DP"
         }
       ];
-      
+
       await db.insert(testimonials).values(testimonialsData);
     } else {
       console.log(`Found ${existingTestimonials[0].count} existing testimonials, skipping testimonial seeding.`);
     }
-    
+
     // Add discounts if they don't exist
     const existingDiscounts = await db.select({ count: sql`count(*)` }).from(discounts);
-    
+
     if (Number(existingDiscounts[0].count) === 0) {
       console.log('Adding discount codes...');
       await db.insert(discounts).values(discountData);
     } else {
       console.log(`Found ${existingDiscounts[0].count} existing discounts, skipping discount seeding.`);
     }
-    
+
     // Add site settings if they don't exist
     const existingSiteSettings = await db.select({ count: sql`count(*)` }).from(siteSettings);
-    
+
     if (Number(existingSiteSettings[0].count) === 0) {
       console.log('Adding store settings...');
       await db.insert(siteSettings).values(storeSettingsData);
@@ -100,10 +100,10 @@ export async function initializeDatabase() {
 
     // Add sample orders for demonstration
     const existingOrders = await db.select({ count: sql`count(*)` }).from(orders);
-    
+
     if (Number(existingOrders[0].count) === 0) {
       console.log('Adding sample orders...');
-      
+
       // Create demo user first
       const [demoUser] = await db.insert(users).values({
         name: "Demo User",
@@ -111,7 +111,7 @@ export async function initializeDatabase() {
         password: "demo_password",
         role: "user"
       }).returning();
-      
+
       // Create sample orders
       const [order1] = await db.insert(orders).values({
         userId: demoUser.id,
@@ -125,7 +125,7 @@ export async function initializeDatabase() {
         discountId: 1,
         deliveredAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
       }).returning();
-      
+
       const [order2] = await db.insert(orders).values({
         userId: demoUser.id,
         sessionId: "demo-session-456",
@@ -136,7 +136,7 @@ export async function initializeDatabase() {
         billingAddress: "456 Organic Street, Eco City, CA 94102",
         paymentMethod: "razorpay"
       }).returning();
-      
+
       // Add order items
       await db.insert(orderItems).values([
         { orderId: order1.id, productId: 1, quantity: 2, price: 15.00 },
@@ -144,7 +144,7 @@ export async function initializeDatabase() {
         { orderId: order2.id, productId: 3, quantity: 3, price: 22.50 },
         { orderId: order2.id, productId: 4, quantity: 1, price: 11.50 }
       ]);
-      
+
       // Add payment records
       await db.insert(payments).values([
         {
@@ -164,13 +164,13 @@ export async function initializeDatabase() {
           method: "upi"
         }
       ]);
-      
+
     } else {
       console.log(`Found ${existingOrders[0].count} existing orders, skipping order seeding.`);
     }
 
     console.log('Database initialization completed successfully!');
-    
+
   } catch (error) {
     console.error('Error initializing database:', error);
     throw error;

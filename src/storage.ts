@@ -1,11 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import * as crypto from 'crypto';
-import { 
-  Product, InsertProduct, 
-  Farmer, InsertFarmer, 
-  Cart, InsertCart, 
+import {
+  Product, InsertProduct,
+  Farmer, InsertFarmer,
+  Cart, InsertCart,
   CartItem, InsertCartItem,
-  CartWithItems, 
+  CartWithItems,
   Testimonial, InsertTestimonial,
   NewsletterSubscription, InsertNewsletterSubscription,
   ProductReview, InsertProductReview,
@@ -22,7 +22,7 @@ import {
   products, farmers, carts, cartItems, testimonials, newsletterSubscriptions, productReviews,
   users, payments, subscriptions, subscriptionStatusEnum, contactMessages, orders, orderItems, teamMembers,
   discounts, discountUsage, siteSettings
-} from '@shared/schema';
+} from './shared/schema';
 import { productData } from './productData';
 import { farmerData } from './farmerData';
 import { db } from './db';
@@ -39,7 +39,7 @@ export interface IStorage {
   getFeaturedProducts(): Promise<Product[]>;
   updateProductStock(productId: number, quantity: number): Promise<Product>;
   validateStockAvailability(productId: number, requestedQuantity: number): Promise<boolean>;
-  
+
   // Enhanced Products
   getAllEnhancedProducts(): Promise<any[]>;
 
@@ -63,13 +63,13 @@ export interface IStorage {
   getAllNewsletterSubscriptions(): Promise<NewsletterSubscription[]>;
   getNewsletterSubscriptionById(id: number): Promise<NewsletterSubscription | undefined>;
   deleteNewsletterSubscription(id: number): Promise<boolean>;
-  
+
   // Product Reviews
   getProductReviews(productId: number): Promise<ProductReview[]>;
   addProductReview(review: InsertProductReview): Promise<ProductReview>;
   canUserReviewProduct(userId: number, productId: number): Promise<boolean>;
   getUserProductReviews(userId: number): Promise<ProductReview[]>;
-  
+
   // Contact Messages
   addContactMessage(message: InsertContactMessage): Promise<ContactMessage>;
   getAllContactMessages(): Promise<ContactMessage[]>;
@@ -146,7 +146,7 @@ export class MemStorage implements IStorage {
   private payments: Map<number, Payment>;
   private subscriptions: Map<number, Subscription>;
   private contactMessages: Map<number, ContactMessage>;
-  
+
   private currentCartItemId: number;
   private currentNewsletterSubscriptionId: number;
   private currentProductReviewId: number;
@@ -167,7 +167,7 @@ export class MemStorage implements IStorage {
     this.payments = new Map();
     this.subscriptions = new Map();
     this.contactMessages = new Map();
-    
+
     this.currentCartItemId = 1;
     this.currentNewsletterSubscriptionId = 1;
     this.currentProductReviewId = 1;
@@ -175,7 +175,7 @@ export class MemStorage implements IStorage {
     this.currentPaymentId = 1;
     this.currentSubscriptionId = 1;
     this.currentContactMessageId = 1;
-    
+
     // Initialize with seed data
     this.initializeProducts();
     this.initializeFarmers();
@@ -261,13 +261,13 @@ export class MemStorage implements IStorage {
     if (!product) {
       throw new Error(`Product with id ${productId} not found`);
     }
-    
+
     const updatedProduct: Product = {
       ...product,
       stockQuantity: quantity,
       updatedAt: new Date()
     };
-    
+
     this.products.set(productId, updatedProduct);
     return updatedProduct;
   }
@@ -277,7 +277,7 @@ export class MemStorage implements IStorage {
     if (!product) {
       return false;
     }
-    
+
     return product.stockQuantity >= requestedQuantity;
   }
 
@@ -303,7 +303,7 @@ export class MemStorage implements IStorage {
   // Cart methods
   async getCart(sessionId: string): Promise<CartWithItems> {
     let cart = this.carts.get(sessionId);
-    
+
     if (!cart) {
       cart = {
         id: 1, // In a real DB this would be auto-incremented
@@ -319,7 +319,7 @@ export class MemStorage implements IStorage {
 
   async addToCart(sessionId: string, productId: number, quantity: number): Promise<CartWithItems> {
     let cart = this.carts.get(sessionId);
-    
+
     if (!cart) {
       cart = {
         id: 1, // In a real DB this would be auto-incremented
@@ -358,7 +358,7 @@ export class MemStorage implements IStorage {
 
   async updateCartItem(sessionId: string, productId: number, quantity: number): Promise<CartWithItems> {
     const cart = this.carts.get(sessionId);
-    
+
     if (!cart) {
       throw new Error("Cart not found");
     }
@@ -372,7 +372,7 @@ export class MemStorage implements IStorage {
     }
 
     const cartItem = cartItems[0];
-    
+
     if (quantity <= 0) {
       // Remove item if quantity is 0 or negative
       this.cartItems.delete(cartItem.id);
@@ -390,7 +390,7 @@ export class MemStorage implements IStorage {
 
   async removeFromCart(sessionId: string, productId: number): Promise<CartWithItems> {
     const cart = this.carts.get(sessionId);
-    
+
     if (!cart) {
       throw new Error("Cart not found");
     }
@@ -418,11 +418,11 @@ export class MemStorage implements IStorage {
       .filter(item => item.cartId === cart.id)
       .map(item => {
         const product = this.products.get(item.productId);
-        
+
         if (!product) {
           throw new Error(`Product with ID ${item.productId} not found`);
         }
-        
+
         return { ...item, product };
       });
 
@@ -468,7 +468,7 @@ export class MemStorage implements IStorage {
   }
 
   async getAllNewsletterSubscriptions(): Promise<NewsletterSubscription[]> {
-    return Array.from(this.newsletterSubscriptions.values()).sort((a, b) => 
+    return Array.from(this.newsletterSubscriptions.values()).sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }
@@ -480,13 +480,13 @@ export class MemStorage implements IStorage {
   async deleteNewsletterSubscription(id: number): Promise<boolean> {
     return this.newsletterSubscriptions.delete(id);
   }
-  
+
   // Product Review methods
   async getProductReviews(productId: number): Promise<ProductReview[]> {
     return Array.from(this.productReviews.values())
       .filter(review => review.productId === productId);
   }
-  
+
   async addProductReview(review: InsertProductReview): Promise<ProductReview> {
     const newReview: ProductReview = {
       id: this.currentProductReviewId++,
@@ -499,34 +499,34 @@ export class MemStorage implements IStorage {
       verified: review.verified ?? false,
       createdAt: new Date()
     };
-    
+
     this.productReviews.set(newReview.id, newReview);
     return newReview;
   }
-  
+
   async canUserReviewProduct(userId: number, productId: number): Promise<boolean> {
     // Check if user has already reviewed this product
     const hasReviewed = Array.from(this.productReviews.values())
       .some(review => review.userId === userId && review.productId === productId);
-    
+
     if (hasReviewed) {
       return false; // User has already reviewed this product
     }
-    
+
     // In a real app, we would check if the user has purchased this product
     // and if the order status is "delivered" - here we'll simulate this logic
     const userOrders = Array.from(this.payments.values())
       .filter(payment => payment.userId === userId && payment.status === "completed");
-    
+
     // For demo purposes, if the user has any completed payment, they can review any product
     return userOrders.length > 0;
   }
-  
+
   async getUserProductReviews(userId: number): Promise<ProductReview[]> {
     return Array.from(this.productReviews.values())
       .filter(review => review.userId === userId);
   }
-  
+
   async addContactMessage(message: InsertContactMessage): Promise<ContactMessage> {
     const newMessage: ContactMessage = {
       id: this.currentContactMessageId++,
@@ -539,32 +539,32 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
       updatedAt: new Date()
     };
-    
+
     this.contactMessages.set(newMessage.id, newMessage);
     return newMessage;
   }
-  
+
   async getAllContactMessages(): Promise<ContactMessage[]> {
     return Array.from(this.contactMessages.values())
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
-  
+
   async getContactMessageById(id: number): Promise<ContactMessage | undefined> {
     return this.contactMessages.get(id);
   }
-  
+
   async updateContactMessageStatus(id: number, status: string): Promise<ContactMessage> {
     const message = this.contactMessages.get(id);
     if (!message) {
       throw new Error(`Contact message with ID ${id} not found`);
     }
-    
+
     const updatedMessage: ContactMessage = {
       ...message,
       status,
       updatedAt: new Date()
     };
-    
+
     this.contactMessages.set(id, updatedMessage);
     return updatedMessage;
   }
@@ -608,7 +608,7 @@ export class MemStorage implements IStorage {
 
   async updateUser(id: number, userData: Partial<InsertUser>): Promise<User> {
     const user = this.users.get(id);
-    
+
     if (!user) {
       throw new Error("User not found");
     }
@@ -747,7 +747,7 @@ export class MemStorage implements IStorage {
 
   async updateSubscriptionStatus(id: number, status: string): Promise<Subscription> {
     const subscription = this.subscriptions.get(id);
-    
+
     if (!subscription) {
       throw new Error("Subscription not found");
     }
@@ -816,27 +816,27 @@ export class DatabaseStorage implements IStorage {
   async updateProductStock(productId: number, quantity: number): Promise<Product> {
     const [updatedProduct] = await db
       .update(products)
-      .set({ 
+      .set({
         stockQuantity: quantity,
         updatedAt: new Date()
       })
       .where(eq(products.id, productId))
       .returning();
-    
+
     if (!updatedProduct) {
       throw new Error(`Product with id ${productId} not found`);
     }
-    
+
     return updatedProduct;
   }
 
   async validateStockAvailability(productId: number, requestedQuantity: number): Promise<boolean> {
     const [product] = await db.select().from(products).where(eq(products.id, productId));
-    
+
     if (!product) {
       return false;
     }
-    
+
     return product.stockQuantity >= requestedQuantity;
   }
 
@@ -859,14 +859,14 @@ export class DatabaseStorage implements IStorage {
     const featuredFarmers = await db.select().from(farmers).where(eq(farmers.featured, true));
     return featuredFarmers;
   }
-  
+
   async getProductReviews(productId: number): Promise<ProductReview[]> {
     const reviews = await db.select()
       .from(productReviews)
       .where(eq(productReviews.productId, productId));
     return reviews;
   }
-  
+
   async addProductReview(review: InsertProductReview): Promise<ProductReview> {
     const [newReview] = await db
       .insert(productReviews)
@@ -874,11 +874,11 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return newReview;
   }
-  
+
   async canUserReviewProduct(userId: number, productId: number): Promise<boolean> {
     // User can review a product if they have an order with status "delivered" containing this product
     // and they haven't already reviewed it
-    
+
     // 1. Check if user has already reviewed this product
     const existingReviews = await db.select()
       .from(productReviews)
@@ -886,11 +886,11 @@ export class DatabaseStorage implements IStorage {
         eq(productReviews.userId, userId),
         eq(productReviews.productId, productId)
       ));
-    
+
     if (existingReviews.length > 0) {
       return false; // User has already reviewed this product
     }
-    
+
     // 2. Check if user has purchased this product and it has been delivered
     const deliveredOrders = await db.select({
       orderId: orders.id
@@ -902,44 +902,44 @@ export class DatabaseStorage implements IStorage {
       eq(orderItems.productId, productId),
       eq(orders.status, "delivered") // Only delivered orders qualify for review
     ));
-    
+
     return deliveredOrders.length > 0;
   }
-  
+
   async getUserProductReviews(userId: number): Promise<ProductReview[]> {
     const reviews = await db.select().from(productReviews).where(eq(productReviews.userId, userId));
     return reviews;
   }
-  
+
   async addContactMessage(message: InsertContactMessage): Promise<ContactMessage> {
     const [newMessage] = await db.insert(contactMessages).values(message).returning();
     return newMessage;
   }
-  
+
   async getAllContactMessages(): Promise<ContactMessage[]> {
     const messages = await db.select().from(contactMessages).orderBy(contactMessages.createdAt);
     return messages;
   }
-  
+
   async getContactMessageById(id: number): Promise<ContactMessage | undefined> {
     const [message] = await db.select().from(contactMessages).where(eq(contactMessages.id, id));
     return message;
   }
-  
+
   async updateContactMessageStatus(id: number, status: string): Promise<ContactMessage> {
     const [updatedMessage] = await db
       .update(contactMessages)
       .set({ status, updatedAt: new Date() })
       .where(eq(contactMessages.id, id))
       .returning();
-    
+
     return updatedMessage;
   }
 
   async getCart(sessionId: string): Promise<CartWithItems> {
     // Find or create cart
     let [cart] = await db.select().from(carts).where(eq(carts.sessionId, sessionId));
-    
+
     if (!cart) {
       const [newCart] = await db.insert(carts).values({ sessionId }).returning();
       cart = newCart;
@@ -951,7 +951,7 @@ export class DatabaseStorage implements IStorage {
   async addToCart(sessionId: string, productId: number, quantity: number): Promise<CartWithItems> {
     // Get cart or create if not exists
     let [cart] = await db.select().from(carts).where(eq(carts.sessionId, sessionId));
-    
+
     if (!cart) {
       [cart] = await db.insert(carts).values({ sessionId }).returning();
     }
@@ -989,7 +989,7 @@ export class DatabaseStorage implements IStorage {
   async updateCartItem(sessionId: string, productId: number, quantity: number): Promise<CartWithItems> {
     // Get cart
     const [cart] = await db.select().from(carts).where(eq(carts.sessionId, sessionId));
-    
+
     if (!cart) {
       throw new Error("Cart not found");
     }
@@ -1027,7 +1027,7 @@ export class DatabaseStorage implements IStorage {
   async removeFromCart(sessionId: string, productId: number): Promise<CartWithItems> {
     // Get cart
     const [cart] = await db.select().from(carts).where(eq(carts.sessionId, sessionId));
-    
+
     if (!cart) {
       throw new Error("Cart not found");
     }
@@ -1050,11 +1050,11 @@ export class DatabaseStorage implements IStorage {
   async clearCart(sessionId: string): Promise<void> {
     // Get cart
     const [cart] = await db.select().from(carts).where(eq(carts.sessionId, sessionId));
-    
+
     if (cart) {
       // Delete all cart items
       await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
-      
+
       // Update cart's updatedAt timestamp
       await db.update(carts)
         .set({ updatedAt: new Date() })
@@ -1150,7 +1150,7 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select()
       .from(users)
       .where(eq(users.email, email));
-    
+
     return user;
   }
 
@@ -1158,7 +1158,7 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select()
       .from(users)
       .where(eq(users.id, id));
-    
+
     return user;
   }
 
@@ -1219,7 +1219,7 @@ export class DatabaseStorage implements IStorage {
 
   async resetPassword(token: string, newPassword: string): Promise<boolean> {
     const now = new Date();
-    
+
     const [user] = await db.select()
       .from(users)
       .where(and(
@@ -1316,40 +1316,40 @@ export class DatabaseStorage implements IStorage {
   async createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem> {
     // Validate stock availability before creating order item
     const isStockAvailable = await this.validateStockAvailability(
-      orderItem.productId, 
+      orderItem.productId,
       orderItem.quantity
     );
-    
+
     if (!isStockAvailable) {
       throw new Error(`Insufficient stock for product ID ${orderItem.productId}. Requested: ${orderItem.quantity}`);
     }
 
     // Create the order item
     const [newOrderItem] = await db.insert(orderItems).values(orderItem).returning();
-    
+
     // Automatically deduct stock from inventory
     await this.deductProductStock(orderItem.productId, orderItem.quantity);
-    
+
     return newOrderItem;
   }
 
   // Helper method to deduct stock from product inventory
   private async deductProductStock(productId: number, quantity: number): Promise<void> {
     const [currentProduct] = await db.select().from(products).where(eq(products.id, productId));
-    
+
     if (!currentProduct) {
       throw new Error(`Product with id ${productId} not found`);
     }
-    
+
     const newStockQuantity = currentProduct.stockQuantity - quantity;
-    
+
     // Prevent negative stock
     if (newStockQuantity < 0) {
       throw new Error(`Cannot deduct ${quantity} items from product ${productId}. Available stock: ${currentProduct.stockQuantity}`);
     }
-    
+
     await db.update(products)
-      .set({ 
+      .set({
         stockQuantity: newStockQuantity,
         updatedAt: new Date()
       })
@@ -1383,17 +1383,17 @@ export class DatabaseStorage implements IStorage {
 
   async updateOrderStatus(id: number, status: string): Promise<Order> {
     const [order] = await db.update(orders)
-      .set({ 
+      .set({
         status,
         updatedAt: new Date()
       })
       .where(eq(orders.id, id))
       .returning();
-    
+
     if (!order) {
       throw new Error("Order not found");
     }
-    
+
     return order;
   }
 
@@ -1420,17 +1420,17 @@ export class DatabaseStorage implements IStorage {
 
   async updateTeamMember(id: number, teamMemberData: Partial<InsertTeamMember>): Promise<TeamMember> {
     const [updatedMember] = await db.update(teamMembers)
-      .set({ 
+      .set({
         ...teamMemberData,
         updatedAt: new Date()
       })
       .where(eq(teamMembers.id, id))
       .returning();
-    
+
     if (!updatedMember) {
       throw new Error("Team member not found");
     }
-    
+
     return updatedMember;
   }
 
@@ -1499,7 +1499,7 @@ export class DatabaseStorage implements IStorage {
 
   async validateDiscount(code: string, userId?: number, cartTotal?: number): Promise<{ valid: boolean; discount?: Discount; error?: string }> {
     const discount = await this.getDiscountByCode(code);
-    
+
     if (!discount) {
       return { valid: false, error: "Invalid discount code" };
     }
@@ -1539,7 +1539,7 @@ export class DatabaseStorage implements IStorage {
 
   async validateDiscountById(id: number, userId?: number, cartTotal?: number): Promise<{ valid: boolean; discount?: Discount; error?: string }> {
     const discount = await this.getDiscountById(id);
-    
+
     if (!discount) {
       return { valid: false, error: "Invalid discount" };
     }
@@ -1639,7 +1639,7 @@ export class DatabaseStorage implements IStorage {
         }
       })
       .returning();
-    
+
     return upsertedSetting;
   }
 

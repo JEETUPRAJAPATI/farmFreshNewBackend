@@ -1,4 +1,4 @@
-import { InsertDiscount } from '@shared/schema';
+import { InsertDiscount } from './shared/schema';
 
 export const discountData: InsertDiscount[] = [
   {

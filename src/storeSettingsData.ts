@@ -1,4 +1,4 @@
-import type { InsertSiteSetting } from "@shared/schema";
+import type { InsertSiteSetting } from "./shared/schema";
 
 export const storeSettingsData: InsertSiteSetting[] = [
   // Store Information
@@ -9,7 +9,7 @@ export const storeSettingsData: InsertSiteSetting[] = [
     description: "Website name"
   },
   {
-    key: "site_tagline", 
+    key: "site_tagline",
     value: "Fresh from Farm to Your Table",
     type: "text",
     description: "Website tagline"
