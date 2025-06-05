@@ -121,7 +121,7 @@
     "@types/bcrypt": "^5.0.2",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/nodemailer": "^6.4.17",
-    "esbuild-plugin-tsconfig-paths": "^1.0.1",
+    "esbuild-plugin-tsconfig-paths": "^1.0.1"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
