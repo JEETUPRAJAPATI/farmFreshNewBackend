@@ -1,11 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import * as crypto from 'crypto';
-import { 
-  Product, InsertProduct, 
-  Farmer, InsertFarmer, 
-  Cart, InsertCart, 
+import {
+  Product, InsertProduct,
+  Farmer, InsertFarmer,
+  Cart, InsertCart,
   CartItem, InsertCartItem,
-  CartWithItems, 
+  CartWithItems,
   Testimonial, InsertTestimonial,
   NewsletterSubscription, InsertNewsletterSubscription,
   ProductReview, InsertProductReview,
@@ -16,13 +16,9 @@ import {
   Order, InsertOrder,
   OrderItem, InsertOrderItem,
   TeamMember, InsertTeamMember,
-  Discount, InsertDiscount,
-  DiscountUsage, InsertDiscountUsage,
-  SiteSetting, InsertSiteSetting,
   products, farmers, carts, cartItems, testimonials, newsletterSubscriptions, productReviews,
-  users, payments, subscriptions, subscriptionStatusEnum, contactMessages, orders, orderItems, teamMembers,
-  discounts, discountUsage, siteSettings
-} from '@shared/schema';
+  users, payments, subscriptions, subscriptionStatusEnum, contactMessages, orders, orderItems, teamMembers
+} from './shared/schema';
 import { productData } from './productData';
 import { farmerData } from './farmerData';
 import { db } from './db';
@@ -37,9 +33,7 @@ export interface IStorage {
   getProductById(id: number): Promise<Product | undefined>;
   getProductsByCategory(category: string): Promise<Product[]>;
   getFeaturedProducts(): Promise<Product[]>;
-  updateProductStock(productId: number, quantity: number): Promise<Product>;
-  validateStockAvailability(productId: number, requestedQuantity: number): Promise<boolean>;
-  
+
   // Enhanced Products
   getAllEnhancedProducts(): Promise<any[]>;
 
@@ -63,13 +57,13 @@ export interface IStorage {
   getAllNewsletterSubscriptions(): Promise<NewsletterSubscription[]>;
   getNewsletterSubscriptionById(id: number): Promise<NewsletterSubscription | undefined>;
   deleteNewsletterSubscription(id: number): Promise<boolean>;
-  
+
   // Product Reviews
   getProductReviews(productId: number): Promise<ProductReview[]>;
   addProductReview(review: InsertProductReview): Promise<ProductReview>;
   canUserReviewProduct(userId: number, productId: number): Promise<boolean>;
   getUserProductReviews(userId: number): Promise<ProductReview[]>;
-  
+
   // Contact Messages
   addContactMessage(message: InsertContactMessage): Promise<ContactMessage>;
   getAllContactMessages(): Promise<ContactMessage[]>;
@@ -111,27 +105,6 @@ export interface IStorage {
   createTeamMember(teamMember: InsertTeamMember): Promise<TeamMember>;
   updateTeamMember(id: number, teamMember: Partial<InsertTeamMember>): Promise<TeamMember>;
   deleteTeamMember(id: number): Promise<void>;
-
-  // Discounts
-  getAllDiscounts(): Promise<Discount[]>;
-  getActiveDiscounts(): Promise<Discount[]>;
-  getDiscountByCode(code: string): Promise<Discount | undefined>;
-  getDiscountById(id: number): Promise<Discount | undefined>;
-  createDiscount(discount: InsertDiscount): Promise<Discount>;
-  updateDiscount(id: number, discount: Partial<InsertDiscount>): Promise<Discount>;
-  deleteDiscount(id: number): Promise<void>;
-  validateDiscount(code: string, userId?: number, cartTotal?: number): Promise<{ valid: boolean; discount?: Discount; error?: string }>;
-  validateDiscountById(id: number, userId?: number, cartTotal?: number): Promise<{ valid: boolean; discount?: Discount; error?: string }>;
-  applyDiscount(discountId: number, userId?: number, sessionId?: string, orderId?: number): Promise<DiscountUsage>;
-  getDiscountUsage(discountId: number, userId?: number): Promise<number>;
-
-  // Site Settings Methods
-  getSiteSetting(key: string): Promise<SiteSetting | undefined>;
-  getAllSiteSettings(): Promise<SiteSetting[]>;
-  upsertSiteSetting(setting: InsertSiteSetting): Promise<SiteSetting>;
-  deleteSiteSetting(key: string): Promise<void>;
-
-
 }
 
 export class MemStorage implements IStorage {
@@ -146,7 +119,7 @@ export class MemStorage implements IStorage {
   private payments: Map<number, Payment>;
   private subscriptions: Map<number, Subscription>;
   private contactMessages: Map<number, ContactMessage>;
-  
+
   private currentCartItemId: number;
   private currentNewsletterSubscriptionId: number;
   private currentProductReviewId: number;
@@ -167,7 +140,7 @@ export class MemStorage implements IStorage {
     this.payments = new Map();
     this.subscriptions = new Map();
     this.contactMessages = new Map();
-    
+
     this.currentCartItemId = 1;
     this.currentNewsletterSubscriptionId = 1;
     this.currentProductReviewId = 1;
@@ -175,7 +148,7 @@ export class MemStorage implements IStorage {
     this.currentPaymentId = 1;
     this.currentSubscriptionId = 1;
     this.currentContactMessageId = 1;
-    
+
     // Initialize with seed data
     this.initializeProducts();
     this.initializeFarmers();
@@ -256,31 +229,6 @@ export class MemStorage implements IStorage {
     );
   }
 
-  async updateProductStock(productId: number, quantity: number): Promise<Product> {
-    const product = this.products.get(productId);
-    if (!product) {
-      throw new Error(`Product with id ${productId} not found`);
-    }
-    
-    const updatedProduct: Product = {
-      ...product,
-      stockQuantity: quantity,
-      updatedAt: new Date()
-    };
-    
-    this.products.set(productId, updatedProduct);
-    return updatedProduct;
-  }
-
-  async validateStockAvailability(productId: number, requestedQuantity: number): Promise<boolean> {
-    const product = this.products.get(productId);
-    if (!product) {
-      return false;
-    }
-    
-    return product.stockQuantity >= requestedQuantity;
-  }
-
   async getAllEnhancedProducts(): Promise<any[]> {
     return Array.from(this.products.values());
   }
@@ -303,7 +251,7 @@ export class MemStorage implements IStorage {
   // Cart methods
   async getCart(sessionId: string): Promise<CartWithItems> {
     let cart = this.carts.get(sessionId);
-    
+
     if (!cart) {
       cart = {
         id: 1, // In a real DB this would be auto-incremented
@@ -319,7 +267,7 @@ export class MemStorage implements IStorage {
 
   async addToCart(sessionId: string, productId: number, quantity: number): Promise<CartWithItems> {
     let cart = this.carts.get(sessionId);
-    
+
     if (!cart) {
       cart = {
         id: 1, // In a real DB this would be auto-incremented
@@ -358,7 +306,7 @@ export class MemStorage implements IStorage {
 
   async updateCartItem(sessionId: string, productId: number, quantity: number): Promise<CartWithItems> {
     const cart = this.carts.get(sessionId);
-    
+
     if (!cart) {
       throw new Error("Cart not found");
     }
@@ -372,7 +320,7 @@ export class MemStorage implements IStorage {
     }
 
     const cartItem = cartItems[0];
-    
+
     if (quantity <= 0) {
       // Remove item if quantity is 0 or negative
       this.cartItems.delete(cartItem.id);
@@ -390,7 +338,7 @@ export class MemStorage implements IStorage {
 
   async removeFromCart(sessionId: string, productId: number): Promise<CartWithItems> {
     const cart = this.carts.get(sessionId);
-    
+
     if (!cart) {
       throw new Error("Cart not found");
     }
@@ -418,11 +366,11 @@ export class MemStorage implements IStorage {
       .filter(item => item.cartId === cart.id)
       .map(item => {
         const product = this.products.get(item.productId);
-        
+
         if (!product) {
           throw new Error(`Product with ID ${item.productId} not found`);
         }
-        
+
         return { ...item, product };
       });
 
@@ -468,7 +416,7 @@ export class MemStorage implements IStorage {
   }
 
   async getAllNewsletterSubscriptions(): Promise<NewsletterSubscription[]> {
-    return Array.from(this.newsletterSubscriptions.values()).sort((a, b) => 
+    return Array.from(this.newsletterSubscriptions.values()).sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }
@@ -480,13 +428,13 @@ export class MemStorage implements IStorage {
   async deleteNewsletterSubscription(id: number): Promise<boolean> {
     return this.newsletterSubscriptions.delete(id);
   }
-  
+
   // Product Review methods
   async getProductReviews(productId: number): Promise<ProductReview[]> {
     return Array.from(this.productReviews.values())
       .filter(review => review.productId === productId);
   }
-  
+
   async addProductReview(review: InsertProductReview): Promise<ProductReview> {
     const newReview: ProductReview = {
       id: this.currentProductReviewId++,
@@ -499,34 +447,34 @@ export class MemStorage implements IStorage {
       verified: review.verified ?? false,
       createdAt: new Date()
     };
-    
+
     this.productReviews.set(newReview.id, newReview);
     return newReview;
   }
-  
+
   async canUserReviewProduct(userId: number, productId: number): Promise<boolean> {
     // Check if user has already reviewed this product
     const hasReviewed = Array.from(this.productReviews.values())
       .some(review => review.userId === userId && review.productId === productId);
-    
+
     if (hasReviewed) {
       return false; // User has already reviewed this product
     }
-    
+
     // In a real app, we would check if the user has purchased this product
     // and if the order status is "delivered" - here we'll simulate this logic
     const userOrders = Array.from(this.payments.values())
       .filter(payment => payment.userId === userId && payment.status === "completed");
-    
+
     // For demo purposes, if the user has any completed payment, they can review any product
     return userOrders.length > 0;
   }
-  
+
   async getUserProductReviews(userId: number): Promise<ProductReview[]> {
     return Array.from(this.productReviews.values())
       .filter(review => review.userId === userId);
   }
-  
+
   async addContactMessage(message: InsertContactMessage): Promise<ContactMessage> {
     const newMessage: ContactMessage = {
       id: this.currentContactMessageId++,
@@ -539,32 +487,32 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
       updatedAt: new Date()
     };
-    
+
     this.contactMessages.set(newMessage.id, newMessage);
     return newMessage;
   }
-  
+
   async getAllContactMessages(): Promise<ContactMessage[]> {
     return Array.from(this.contactMessages.values())
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
-  
+
   async getContactMessageById(id: number): Promise<ContactMessage | undefined> {
     return this.contactMessages.get(id);
   }
-  
+
   async updateContactMessageStatus(id: number, status: string): Promise<ContactMessage> {
     const message = this.contactMessages.get(id);
     if (!message) {
       throw new Error(`Contact message with ID ${id} not found`);
     }
-    
+
     const updatedMessage: ContactMessage = {
       ...message,
       status,
       updatedAt: new Date()
     };
-    
+
     this.contactMessages.set(id, updatedMessage);
     return updatedMessage;
   }
@@ -608,7 +556,7 @@ export class MemStorage implements IStorage {
 
   async updateUser(id: number, userData: Partial<InsertUser>): Promise<User> {
     const user = this.users.get(id);
-    
+
     if (!user) {
       throw new Error("User not found");
     }
@@ -747,7 +695,7 @@ export class MemStorage implements IStorage {
 
   async updateSubscriptionStatus(id: number, status: string): Promise<Subscription> {
     const subscription = this.subscriptions.get(id);
-    
+
     if (!subscription) {
       throw new Error("Subscription not found");
     }
@@ -813,33 +761,6 @@ export class DatabaseStorage implements IStorage {
     return featuredProducts;
   }
 
-  async updateProductStock(productId: number, quantity: number): Promise<Product> {
-    const [updatedProduct] = await db
-      .update(products)
-      .set({ 
-        stockQuantity: quantity,
-        updatedAt: new Date()
-      })
-      .where(eq(products.id, productId))
-      .returning();
-    
-    if (!updatedProduct) {
-      throw new Error(`Product with id ${productId} not found`);
-    }
-    
-    return updatedProduct;
-  }
-
-  async validateStockAvailability(productId: number, requestedQuantity: number): Promise<boolean> {
-    const [product] = await db.select().from(products).where(eq(products.id, productId));
-    
-    if (!product) {
-      return false;
-    }
-    
-    return product.stockQuantity >= requestedQuantity;
-  }
-
   async getAllEnhancedProducts(): Promise<any[]> {
     const enhancedProducts = await db.select().from(products);
     return enhancedProducts;
@@ -859,14 +780,14 @@ export class DatabaseStorage implements IStorage {
     const featuredFarmers = await db.select().from(farmers).where(eq(farmers.featured, true));
     return featuredFarmers;
   }
-  
+
   async getProductReviews(productId: number): Promise<ProductReview[]> {
     const reviews = await db.select()
       .from(productReviews)
       .where(eq(productReviews.productId, productId));
     return reviews;
   }
-  
+
   async addProductReview(review: InsertProductReview): Promise<ProductReview> {
     const [newReview] = await db
       .insert(productReviews)
@@ -874,11 +795,11 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return newReview;
   }
-  
+
   async canUserReviewProduct(userId: number, productId: number): Promise<boolean> {
     // User can review a product if they have an order with status "delivered" containing this product
     // and they haven't already reviewed it
-    
+
     // 1. Check if user has already reviewed this product
     const existingReviews = await db.select()
       .from(productReviews)
@@ -886,11 +807,11 @@ export class DatabaseStorage implements IStorage {
         eq(productReviews.userId, userId),
         eq(productReviews.productId, productId)
       ));
-    
+
     if (existingReviews.length > 0) {
       return false; // User has already reviewed this product
     }
-    
+
     // 2. Check if user has purchased this product and it has been delivered
     const deliveredOrders = await db.select({
       orderId: orders.id
@@ -902,44 +823,44 @@ export class DatabaseStorage implements IStorage {
       eq(orderItems.productId, productId),
       eq(orders.status, "delivered") // Only delivered orders qualify for review
     ));
-    
+
     return deliveredOrders.length > 0;
   }
-  
+
   async getUserProductReviews(userId: number): Promise<ProductReview[]> {
     const reviews = await db.select().from(productReviews).where(eq(productReviews.userId, userId));
     return reviews;
   }
-  
+
   async addContactMessage(message: InsertContactMessage): Promise<ContactMessage> {
     const [newMessage] = await db.insert(contactMessages).values(message).returning();
     return newMessage;
   }
-  
+
   async getAllContactMessages(): Promise<ContactMessage[]> {
     const messages = await db.select().from(contactMessages).orderBy(contactMessages.createdAt);
     return messages;
   }
-  
+
   async getContactMessageById(id: number): Promise<ContactMessage | undefined> {
     const [message] = await db.select().from(contactMessages).where(eq(contactMessages.id, id));
     return message;
   }
-  
+
   async updateContactMessageStatus(id: number, status: string): Promise<ContactMessage> {
     const [updatedMessage] = await db
       .update(contactMessages)
       .set({ status, updatedAt: new Date() })
       .where(eq(contactMessages.id, id))
       .returning();
-    
+
     return updatedMessage;
   }
 
   async getCart(sessionId: string): Promise<CartWithItems> {
     // Find or create cart
     let [cart] = await db.select().from(carts).where(eq(carts.sessionId, sessionId));
-    
+
     if (!cart) {
       const [newCart] = await db.insert(carts).values({ sessionId }).returning();
       cart = newCart;
@@ -951,7 +872,7 @@ export class DatabaseStorage implements IStorage {
   async addToCart(sessionId: string, productId: number, quantity: number): Promise<CartWithItems> {
     // Get cart or create if not exists
     let [cart] = await db.select().from(carts).where(eq(carts.sessionId, sessionId));
-    
+
     if (!cart) {
       [cart] = await db.insert(carts).values({ sessionId }).returning();
     }
@@ -989,7 +910,7 @@ export class DatabaseStorage implements IStorage {
   async updateCartItem(sessionId: string, productId: number, quantity: number): Promise<CartWithItems> {
     // Get cart
     const [cart] = await db.select().from(carts).where(eq(carts.sessionId, sessionId));
-    
+
     if (!cart) {
       throw new Error("Cart not found");
     }
@@ -1027,7 +948,7 @@ export class DatabaseStorage implements IStorage {
   async removeFromCart(sessionId: string, productId: number): Promise<CartWithItems> {
     // Get cart
     const [cart] = await db.select().from(carts).where(eq(carts.sessionId, sessionId));
-    
+
     if (!cart) {
       throw new Error("Cart not found");
     }
@@ -1050,11 +971,11 @@ export class DatabaseStorage implements IStorage {
   async clearCart(sessionId: string): Promise<void> {
     // Get cart
     const [cart] = await db.select().from(carts).where(eq(carts.sessionId, sessionId));
-    
+
     if (cart) {
       // Delete all cart items
       await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
-      
+
       // Update cart's updatedAt timestamp
       await db.update(carts)
         .set({ updatedAt: new Date() })
@@ -1150,7 +1071,7 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select()
       .from(users)
       .where(eq(users.email, email));
-    
+
     return user;
   }
 
@@ -1158,7 +1079,7 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select()
       .from(users)
       .where(eq(users.id, id));
-    
+
     return user;
   }
 
@@ -1219,7 +1140,7 @@ export class DatabaseStorage implements IStorage {
 
   async resetPassword(token: string, newPassword: string): Promise<boolean> {
     const now = new Date();
-    
+
     const [user] = await db.select()
       .from(users)
       .where(and(
@@ -1307,53 +1228,15 @@ export class DatabaseStorage implements IStorage {
     return updatedSubscription;
   }
 
-  // Order management methods with inventory sync
+  // Order management methods
   async createOrder(order: InsertOrder): Promise<Order> {
     const [newOrder] = await db.insert(orders).values(order).returning();
     return newOrder;
   }
 
   async createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem> {
-    // Validate stock availability before creating order item
-    const isStockAvailable = await this.validateStockAvailability(
-      orderItem.productId, 
-      orderItem.quantity
-    );
-    
-    if (!isStockAvailable) {
-      throw new Error(`Insufficient stock for product ID ${orderItem.productId}. Requested: ${orderItem.quantity}`);
-    }
-
-    // Create the order item
     const [newOrderItem] = await db.insert(orderItems).values(orderItem).returning();
-    
-    // Automatically deduct stock from inventory
-    await this.deductProductStock(orderItem.productId, orderItem.quantity);
-    
     return newOrderItem;
-  }
-
-  // Helper method to deduct stock from product inventory
-  private async deductProductStock(productId: number, quantity: number): Promise<void> {
-    const [currentProduct] = await db.select().from(products).where(eq(products.id, productId));
-    
-    if (!currentProduct) {
-      throw new Error(`Product with id ${productId} not found`);
-    }
-    
-    const newStockQuantity = currentProduct.stockQuantity - quantity;
-    
-    // Prevent negative stock
-    if (newStockQuantity < 0) {
-      throw new Error(`Cannot deduct ${quantity} items from product ${productId}. Available stock: ${currentProduct.stockQuantity}`);
-    }
-    
-    await db.update(products)
-      .set({ 
-        stockQuantity: newStockQuantity,
-        updatedAt: new Date()
-      })
-      .where(eq(products.id, productId));
   }
 
   async getOrdersByUserId(userId: number): Promise<Order[]> {
@@ -1383,17 +1266,17 @@ export class DatabaseStorage implements IStorage {
 
   async updateOrderStatus(id: number, status: string): Promise<Order> {
     const [order] = await db.update(orders)
-      .set({ 
+      .set({
         status,
         updatedAt: new Date()
       })
       .where(eq(orders.id, id))
       .returning();
-    
+
     if (!order) {
       throw new Error("Order not found");
     }
-    
+
     return order;
   }
 
@@ -1420,231 +1303,22 @@ export class DatabaseStorage implements IStorage {
 
   async updateTeamMember(id: number, teamMemberData: Partial<InsertTeamMember>): Promise<TeamMember> {
     const [updatedMember] = await db.update(teamMembers)
-      .set({ 
+      .set({
         ...teamMemberData,
         updatedAt: new Date()
       })
       .where(eq(teamMembers.id, id))
       .returning();
-    
+
     if (!updatedMember) {
       throw new Error("Team member not found");
     }
-    
+
     return updatedMember;
   }
 
   async deleteTeamMember(id: number): Promise<void> {
     await db.delete(teamMembers).where(eq(teamMembers.id, id));
-  }
-
-  // Discount Management Methods
-  async getAllDiscounts(): Promise<Discount[]> {
-    const discountsList = await db.select().from(discounts).orderBy(desc(discounts.createdAt));
-    return discountsList;
-  }
-
-  async getActiveDiscounts(): Promise<Discount[]> {
-    const now = new Date();
-    const activeDiscounts = await db.select()
-      .from(discounts)
-      .where(
-        and(
-          eq(discounts.status, 'active'),
-          sql`${discounts.startDate} <= ${now}`,
-          sql`${discounts.endDate} >= ${now}`
-        )
-      )
-      .orderBy(desc(discounts.createdAt));
-    return activeDiscounts;
-  }
-
-  async getDiscountByCode(code: string): Promise<Discount | undefined> {
-    const [discount] = await db.select().from(discounts).where(eq(discounts.code, code.toUpperCase()));
-    return discount;
-  }
-
-  async getDiscountById(id: number): Promise<Discount | undefined> {
-    const [discount] = await db.select().from(discounts).where(eq(discounts.id, id));
-    return discount;
-  }
-
-  async createDiscount(discount: InsertDiscount): Promise<Discount> {
-    const [newDiscount] = await db.insert(discounts).values({
-      ...discount,
-      code: discount.code.toUpperCase()
-    }).returning();
-    return newDiscount;
-  }
-
-  async updateDiscount(id: number, discountData: Partial<InsertDiscount>): Promise<Discount> {
-    const [updatedDiscount] = await db.update(discounts)
-      .set({
-        ...discountData,
-        updatedAt: new Date()
-      })
-      .where(eq(discounts.id, id))
-      .returning();
-
-    if (!updatedDiscount) {
-      throw new Error("Discount not found");
-    }
-
-    return updatedDiscount;
-  }
-
-  async deleteDiscount(id: number): Promise<void> {
-    await db.delete(discounts).where(eq(discounts.id, id));
-  }
-
-  async validateDiscount(code: string, userId?: number, cartTotal?: number): Promise<{ valid: boolean; discount?: Discount; error?: string }> {
-    const discount = await this.getDiscountByCode(code);
-    
-    if (!discount) {
-      return { valid: false, error: "Invalid discount code" };
-    }
-
-    const now = new Date();
-
-    // Check if discount is active
-    if (discount.status !== 'active') {
-      return { valid: false, error: "Discount is not active" };
-    }
-
-    // Check date validity
-    if (now < discount.startDate || now > discount.endDate) {
-      return { valid: false, error: "Discount has expired or not yet active" };
-    }
-
-    // Check minimum purchase requirement
-    if (cartTotal && discount.minPurchase && cartTotal < discount.minPurchase) {
-      return { valid: false, error: `Minimum purchase amount is ₹${discount.minPurchase}` };
-    }
-
-    // Check usage limits
-    if (discount.usageLimit && discount.usageLimit > 0 && discount.used && discount.used >= discount.usageLimit) {
-      return { valid: false, error: "Discount usage limit exceeded" };
-    }
-
-    // Check per-user usage limits
-    if (discount.perUser && userId) {
-      const userUsage = await this.getDiscountUsage(discount.id, userId);
-      if (userUsage > 0) {
-        return { valid: false, error: "You have already used this discount" };
-      }
-    }
-
-    return { valid: true, discount };
-  }
-
-  async validateDiscountById(id: number, userId?: number, cartTotal?: number): Promise<{ valid: boolean; discount?: Discount; error?: string }> {
-    const discount = await this.getDiscountById(id);
-    
-    if (!discount) {
-      return { valid: false, error: "Invalid discount" };
-    }
-
-    const now = new Date();
-
-    // Check if discount is active
-    if (discount.status !== 'active') {
-      return { valid: false, error: "Discount is not active" };
-    }
-
-    // Check date validity
-    if (now < discount.startDate || now > discount.endDate) {
-      return { valid: false, error: "Discount has expired or not yet active" };
-    }
-
-    // Check minimum purchase requirement
-    if (cartTotal && discount.minPurchase && cartTotal < discount.minPurchase) {
-      return { valid: false, error: `Minimum purchase amount is ₹${discount.minPurchase}` };
-    }
-
-    // Check usage limits
-    if (discount.usageLimit && discount.usageLimit > 0 && discount.used && discount.used >= discount.usageLimit) {
-      return { valid: false, error: "Discount usage limit exceeded" };
-    }
-
-    // Check per-user usage limits
-    if (discount.perUser && userId) {
-      const userUsage = await this.getDiscountUsage(discount.id, userId);
-      if (userUsage > 0) {
-        return { valid: false, error: "You have already used this discount" };
-      }
-    }
-
-    return { valid: true, discount };
-  }
-
-  async applyDiscount(discountId: number, userId?: number, sessionId?: string, orderId?: number): Promise<DiscountUsage> {
-    // Record discount usage
-    const [usage] = await db.insert(discountUsage).values({
-      discountId,
-      userId,
-      sessionId,
-      orderId
-    }).returning();
-
-    // Increment discount usage count
-    await db.update(discounts)
-      .set({ used: sql`${discounts.used} + 1` })
-      .where(eq(discounts.id, discountId));
-
-    return usage;
-  }
-
-  async getDiscountUsage(discountId: number, userId?: number): Promise<number> {
-    if (userId) {
-      const [result] = await db.select({ count: sql<number>`count(*)` })
-        .from(discountUsage)
-        .where(and(
-          eq(discountUsage.discountId, discountId),
-          eq(discountUsage.userId, userId)
-        ));
-      return result?.count || 0;
-    } else {
-      const [result] = await db.select({ count: sql<number>`count(*)` })
-        .from(discountUsage)
-        .where(eq(discountUsage.discountId, discountId));
-      return result?.count || 0;
-    }
-  }
-
-  // Site Settings Methods
-  async getSiteSetting(key: string): Promise<SiteSetting | undefined> {
-    const [setting] = await db.select().from(siteSettings).where(eq(siteSettings.key, key));
-    return setting;
-  }
-
-  async getAllSiteSettings(): Promise<SiteSetting[]> {
-    const settings = await db.select().from(siteSettings);
-    return settings;
-  }
-
-  async upsertSiteSetting(setting: InsertSiteSetting): Promise<SiteSetting> {
-    const [upsertedSetting] = await db
-      .insert(siteSettings)
-      .values({
-        ...setting,
-        updatedAt: new Date()
-      })
-      .onConflictDoUpdate({
-        target: siteSettings.key,
-        set: {
-          value: setting.value,
-          type: setting.type,
-          description: setting.description,
-          updatedAt: new Date()
-        }
-      })
-      .returning();
-    
-    return upsertedSetting;
-  }
-
-  async deleteSiteSetting(key: string): Promise<void> {
-    await db.delete(siteSettings).where(eq(siteSettings.key, key));
   }
 }
 
