@@ -6,23 +6,25 @@ import { initializeDatabase } from "./initDb.js";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS configuration for frontend
-// app.use(cors({
-//   origin: [
-//     'http://localhost:5173', // Vite dev server
-//     'http://localhost:3000', // React dev server
-//     'https://farm-fresh-new-fronted.vercel.app', // Production frontend
-//   ],
-//   credentials: true
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://farm-fresh-new-fronted02.vercel.app"
+];
 
-// }));
 app.use(
   cors({
-      origin: "*",
-      methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-      credentials: true,
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    credentials: true,
   })
 );
+
 // Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
