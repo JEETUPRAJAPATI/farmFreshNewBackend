@@ -8,7 +8,8 @@ const PORT = process.env.PORT || 5000;
 
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://farm-fresh-new-fronted02.vercel.app"
+  "https://farm-fresh-new-fronted02.vercel.app",
+  "https://farmfresh.techizebuilder.com"
 ];
 
 app.use(
