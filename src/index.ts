@@ -55,19 +55,6 @@ async function startServer() {
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`🔌 API endpoints: http://localhost:${PORT}/api`);
     });
-
-
-    app.listen(PORT, async () => {
-      console.log(`🚀 Server is running on port ${PORT}`);
-
-      // Then initialize DB after successful server start
-      try {
-        await initializeDatabase(); // connects to Neon DB using drizzle
-        console.log("✅ Database initialized");
-      } catch (err) {
-        console.error("❌ Error initializing database:", err);
-      }
-    });
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
