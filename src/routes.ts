@@ -15,9 +15,16 @@ import {
   insertProductReviewSchema,
   insertContactMessageSchema,
   insertTeamMemberSchema,
-  insertDiscountSchema
+  insertDiscountSchema,
+  products
 } from "./shared/schema";
+import { db } from './db';
+import { eq, sql, desc, asc } from 'drizzle-orm';
 import adminRouter from './admin';
+import imageRouter from './imageRoutes';
+import { exportDatabase, exportTable } from './databaseExport';
+import path from 'path';
+import express from 'express';
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -61,31 +68,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.use(getSessionId);
 
+  // Serve uploaded images statically
+  app.use('/uploads', express.static(path.join(process.cwd(), 'public/uploads')));
+
   // Register admin routes
   app.use(`${apiPrefix}/admin`, adminRouter);
 
-  // Get all products (from enhanced products)
+  // Register image upload routes
+  app.use(`${apiPrefix}/images`, imageRouter);
+
+  // Get all products with pagination (user-facing)
   app.get(`${apiPrefix}/products`, async (req, res) => {
     try {
-      const enhancedProducts = await storage.getAllEnhancedProducts();
-      // Convert enhanced products to standard product format
-      const products = enhancedProducts.map((ep: any) => ({
-        id: ep.id,
-        name: ep.name,
-        description: ep.description,
-        shortDescription: ep.shortDescription || (ep.description.length > 100 ? ep.description.substring(0, 100) + "..." : ep.description),
-        price: ep.price,
-        discountPrice: ep.discountPrice,
-        category: ep.category,
-        sku: ep.sku || `EP-${ep.id}`,
-        imageUrl: ep.imageUrl,
-        imageUrls: ep.imageUrls || [ep.imageUrl],
-        stock: ep.stockQuantity,
-        featured: ep.featured || ep.premiumQuality,
-        farmerId: ep.farmerId
-      }));
-      res.json(products);
+      // Add cache-busting headers
+      res.set({
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
+
+      const allProducts = await storage.getAllProducts();
+      const {
+        page = '1',
+        limit = '12',
+        search = '',
+        category = '',
+        minPrice = '',
+        maxPrice = '',
+        sortBy = 'id',
+        sortOrder = 'desc'
+      } = req.query as Record<string, string>;
+
+      const pageNumber = parseInt(page);
+      const limitNumber = parseInt(limit);
+
+      // Apply filters
+      let filteredProducts = allProducts.filter(product => {
+        // Search filter
+        if (search) {
+          const searchTerm = search.toLowerCase();
+          const matchesSearch = product.name.toLowerCase().includes(searchTerm) ||
+                              product.description.toLowerCase().includes(searchTerm) ||
+                              product.shortDescription.toLowerCase().includes(searchTerm);
+          if (!matchesSearch) return false;
+        }
+
+        // Category filter
+        if (category && category !== 'all') {
+          if (product.category !== category) return false;
+        }
+
+        // Price filters
+        if (minPrice) {
+          const min = parseFloat(minPrice);
+          if (!isNaN(min) && product.price < min) return false;
+        }
+
+        if (maxPrice) {
+          const max = parseFloat(maxPrice);
+          if (!isNaN(max) && product.price > max) return false;
+        }
+
+        return true;
+      });
+
+      // Apply sorting
+      filteredProducts.sort((a, b) => {
+        let comparison = 0;
+
+        if (sortBy === 'price') {
+          comparison = a.price - b.price;
+        } else if (sortBy === 'name') {
+          comparison = a.name.localeCompare(b.name);
+        } else {
+          comparison = a.id - b.id;
+        }
+
+        return sortOrder === 'asc' ? comparison : -comparison;
+      });
+
+      // Calculate pagination
+      const total = filteredProducts.length;
+      const totalPages = Math.ceil(total / limitNumber);
+      const offset = (pageNumber - 1) * limitNumber;
+      const paginatedProducts = filteredProducts.slice(offset, offset + limitNumber);
+
+      res.json({
+        products: paginatedProducts,
+        pagination: {
+          total,
+          page: pageNumber,
+          limit: limitNumber,
+          totalPages,
+          hasNextPage: pageNumber < totalPages,
+          hasPrevPage: pageNumber > 1
+        }
+      });
     } catch (error) {
+      console.error('Error fetching products:', error);
       res.status(500).json({ message: "Failed to fetch products" });
     }
   });
@@ -1461,6 +1541,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Active discounts fetch error:', error);
       res.status(500).json({ message: "Failed to fetch active discounts" });
+    }
+  });
+
+  // Database Export API Routes
+  app.get('/api/admin/database/export', async (req, res) => {
+    try {
+      console.log('Starting database export...');
+      const exportPath = await exportDatabase();
+
+      res.json({
+        message: "Database exported successfully",
+        filePath: exportPath,
+        downloadUrl: `/api/admin/database/download/${path.basename(exportPath)}`
+      });
+    } catch (error) {
+      console.error('Database export error:', error);
+      res.status(500).json({ message: "Failed to export database" });
+    }
+  });
+
+  // Download exported database file
+  app.get('/api/admin/database/download/:filename', (req, res) => {
+    try {
+      const filename = req.params.filename;
+      const filePath = path.join(process.cwd(), 'exports', filename);
+
+      // Security check - ensure file is in exports directory
+      if (!filePath.startsWith(path.join(process.cwd(), 'exports'))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Check if file exists
+      if (!require('fs').existsSync(filePath)) {
+        return res.status(404).json({ message: "Export file not found" });
+      }
+
+      res.download(filePath, filename, (err) => {
+        if (err) {
+          console.error('File download error:', err);
+          res.status(500).json({ message: "Failed to download file" });
+        }
+      });
+    } catch (error) {
+      console.error('Download error:', error);
+      res.status(500).json({ message: "Failed to download export file" });
+    }
+  });
+
+  // Export specific table
+  app.get('/api/admin/database/export/:tableName', async (req, res) => {
+    try {
+      const tableName = req.params.tableName;
+      const exportPath = await exportTable(tableName);
+
+      res.json({
+        message: `Table ${tableName} exported successfully`,
+        filePath: exportPath,
+        downloadUrl: `/api/admin/database/download/${path.basename(exportPath)}`
+      });
+    } catch (error) {
+      console.error(`Table export error for ${req.params.tableName}:`, error);
+      res.status(500).json({ message: `Failed to export table ${req.params.tableName}` });
     }
   });
 

@@ -7,6 +7,13 @@ import { z } from 'zod';
 // GET all products with pagination, sorting and filtering
 export const getAllProducts = async (req: Request, res: Response) => {
   try {
+    // Add cache-busting headers
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+
     const {
       page = '1',
       limit = '10',
@@ -112,15 +119,30 @@ export const getProductById = async (req: Request, res: Response) => {
 // CREATE product
 export const createProduct = async (req: Request, res: Response) => {
   try {
+    // Add cache-busting headers
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+
     // Validate request body
     const productData = insertProductSchema.parse(req.body);
+
+    // Process image URLs to ensure local image paths are stored properly
+    const processedData = {
+      ...productData,
+      localImagePaths: productData.imageUrls || null,
+      updatedAt: new Date()
+    };
 
     // Insert product
     const [newProduct] = await db
       .insert(products)
-      .values(productData)
+      .values(processedData)
       .returning();
 
+    console.log('Product created successfully:', newProduct.id, newProduct.name);
     res.status(201).json(newProduct);
   } catch (error) {
     console.error('Error creating product:', error);
@@ -137,16 +159,30 @@ export const createProduct = async (req: Request, res: Response) => {
 // UPDATE product
 export const updateProduct = async (req: Request, res: Response) => {
   try {
+    // Add cache-busting headers
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+
     const { id } = req.params;
     const productId = parseInt(id);
 
     // Validate request body
     const productData = insertProductSchema.parse(req.body);
 
+    // Process image URLs to ensure local image paths are stored properly
+    const processedData = {
+      ...productData,
+      localImagePaths: productData.imageUrls || null,
+      updatedAt: new Date()
+    };
+
     // Update product
     const [updatedProduct] = await db
       .update(products)
-      .set(productData)
+      .set(processedData)
       .where(eq(products.id, productId))
       .returning();
 
@@ -154,6 +190,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Product not found' });
     }
 
+    console.log('Product updated successfully:', updatedProduct.id, updatedProduct.name);
     res.json(updatedProduct);
   } catch (error) {
     console.error('Error updating product:', error);
@@ -206,17 +243,57 @@ export const deleteProduct = async (req: Request, res: Response) => {
     const { id } = req.params;
     const productId = parseInt(id);
 
-    // Delete product
+    // Get product before deletion to clean up images
+    const [productToDelete] = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, productId));
+
+    if (!productToDelete) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    // Collect all image paths for cleanup
+    const imagesToDelete: string[] = [];
+
+    // Add primary image
+    if (productToDelete.imageUrl) {
+      imagesToDelete.push(productToDelete.imageUrl);
+    }
+
+    // Add additional images
+    if (productToDelete.imageUrls && productToDelete.imageUrls.length > 0) {
+      imagesToDelete.push(...productToDelete.imageUrls);
+    }
+
+    // Add local image paths
+    if (productToDelete.localImagePaths && productToDelete.localImagePaths.length > 0) {
+      imagesToDelete.push(...productToDelete.localImagePaths);
+    }
+
+    // Delete product from database
     const [deletedProduct] = await db
       .delete(products)
       .where(eq(products.id, productId))
       .returning();
 
-    if (!deletedProduct) {
-      return res.status(404).json({ message: 'Product not found' });
+    // Clean up image files after successful database deletion
+    if (imagesToDelete.length > 0) {
+      try {
+        const { deleteImageFiles } = await import('../imageUpload');
+        deleteImageFiles(imagesToDelete);
+        console.log(`Cleaned up ${imagesToDelete.length} image files for product ${productId}`);
+      } catch (cleanupError) {
+        console.error('Error cleaning up image files:', cleanupError);
+        // Don't fail the deletion if image cleanup fails
+      }
     }
 
-    res.json({ message: 'Product deleted successfully', product: deletedProduct });
+    res.json({
+      message: 'Product deleted successfully',
+      product: deletedProduct,
+      imagesDeleted: imagesToDelete.length
+    });
   } catch (error) {
     console.error('Error deleting product:', error);
     res.status(500).json({ message: 'Failed to delete product', error: String(error) });

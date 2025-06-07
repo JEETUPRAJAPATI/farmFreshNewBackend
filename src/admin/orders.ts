@@ -5,6 +5,7 @@ import {
   orderItems,
   products,
   users,
+  farmers,
   Order,
   OrderItem
 } from '../shared/schema';
@@ -317,5 +318,74 @@ export const getOrderStatistics = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching order statistics:', error);
     res.status(500).json({ message: 'Failed to fetch order statistics', error: String(error) });
+  }
+};
+
+// Export all orders with complete details for CSV/Excel
+export const exportOrders = async (req: Request, res: Response) => {
+  try {
+    // Get all orders with user information
+    const ordersData = await db.select({
+      id: orders.id,
+      userId: orders.userId,
+      sessionId: orders.sessionId,
+      total: orders.total,
+      status: orders.status,
+      shippingAddress: orders.shippingAddress,
+      paymentMethod: orders.paymentMethod,
+      cancellationReason: orders.cancellationReason,
+      deliveredAt: orders.deliveredAt,
+      createdAt: orders.createdAt,
+      updatedAt: orders.updatedAt,
+      userName: users.name,
+      userEmail: users.email
+    })
+    .from(orders)
+    .leftJoin(users, eq(orders.userId, users.id))
+    .orderBy(desc(orders.createdAt));
+
+    // Get all order items with product details
+    const allOrderItems = await db.select({
+      orderId: orderItems.orderId,
+      productId: orderItems.productId,
+      quantity: orderItems.quantity,
+      price: orderItems.price,
+      productName: products.name,
+      productSku: products.sku,
+      productCategory: products.category
+    })
+    .from(orderItems)
+    .leftJoin(products, eq(orderItems.productId, products.id));
+
+    // Group order items by order ID
+    const itemsByOrderId: Record<number, any[]> = {};
+    allOrderItems.forEach(item => {
+      if (!itemsByOrderId[item.orderId]) {
+        itemsByOrderId[item.orderId] = [];
+      }
+      itemsByOrderId[item.orderId].push({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: item.price,
+        productName: item.productName,
+        productSku: item.productSku,
+        productCategory: item.productCategory
+      });
+    });
+
+    // Combine orders with their items
+    const ordersWithItems = ordersData.map(order => ({
+      ...order,
+      items: itemsByOrderId[order.id] || []
+    }));
+
+    res.json({
+      orders: ordersWithItems,
+      exportedAt: new Date().toISOString(),
+      totalOrders: ordersWithItems.length
+    });
+  } catch (error) {
+    console.error('Error exporting orders:', error);
+    res.status(500).json({ message: 'Failed to export orders', error: String(error) });
   }
 };
