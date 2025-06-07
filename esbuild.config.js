@@ -1,10 +1,14 @@
-import { build } from 'esbuild';
+// esbuild.config.js
+import { build } from 'esbuild'
+import path from 'path'
 
 build({
     entryPoints: ['src/index.ts'],
     bundle: true,
-    format: 'esm',
+    outfile: 'dist/index.js',
     platform: 'node',
-    outdir: 'dist',
-    packages: 'external',
-}).catch(() => process.exit(1));
+    format: 'esm',
+    alias: {
+        '@shared': path.resolve(__dirname, 'src/shared'),
+    },
+})

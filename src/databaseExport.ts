@@ -4,7 +4,7 @@ import {
   newsletterSubscriptions, orders, orderItems, productReviews,
   contactMessages, users, payments, subscriptions, teamMembers,
   discounts, discountUsage, siteSettings
-} from '@shared/schema';
+} from './shared/schema';
 import fs from 'fs';
 import path from 'path';
 
