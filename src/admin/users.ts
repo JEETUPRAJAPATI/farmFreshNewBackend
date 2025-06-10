@@ -30,7 +30,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
       createdAt: users.createdAt,
       updatedAt: users.updatedAt
     })
-    .from(users);
+      .from(users);
 
     // Apply search filter if provided
     if (search) {

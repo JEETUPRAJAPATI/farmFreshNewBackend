@@ -44,8 +44,8 @@ export const getAllOrders = async (req: Request, res: Response) => {
       userName: users.name,
       userEmail: users.email
     })
-    .from(orders)
-    .leftJoin(users, eq(orders.userId, users.id));
+      .from(orders)
+      .leftJoin(users, eq(orders.userId, users.id));
 
     // Apply search filter if provided
     if (search) {
@@ -79,7 +79,7 @@ export const getAllOrders = async (req: Request, res: Response) => {
     // Apply the same filters to the count query
     if (search) {
       totalQuery.leftJoin(users, eq(orders.userId, users.id))
-                .where(like(users.name, `%${search}%`));
+        .where(like(users.name, `%${search}%`));
     }
     if (status) {
       totalQuery.where(eq(orders.status, status));
@@ -158,9 +158,9 @@ export const getOrderById = async (req: Request, res: Response) => {
       userName: users.name,
       userEmail: users.email
     })
-    .from(orders)
-    .leftJoin(users, eq(orders.userId, users.id))
-    .where(eq(orders.id, parseInt(id)));
+      .from(orders)
+      .leftJoin(users, eq(orders.userId, users.id))
+      .where(eq(orders.id, parseInt(id)));
 
     if (!orderData) {
       return res.status(404).json({ message: 'Order not found' });
@@ -176,9 +176,9 @@ export const getOrderById = async (req: Request, res: Response) => {
       productName: products.name,
       productImageUrl: products.imageUrl
     })
-    .from(orderItems)
-    .leftJoin(products, eq(orderItems.productId, products.id))
-    .where(eq(orderItems.orderId, parseInt(id)));
+      .from(orderItems)
+      .leftJoin(products, eq(orderItems.productId, products.id))
+      .where(eq(orderItems.orderId, parseInt(id)));
 
     // Return order with its items
     res.json({
@@ -340,9 +340,9 @@ export const exportOrders = async (req: Request, res: Response) => {
       userName: users.name,
       userEmail: users.email
     })
-    .from(orders)
-    .leftJoin(users, eq(orders.userId, users.id))
-    .orderBy(desc(orders.createdAt));
+      .from(orders)
+      .leftJoin(users, eq(orders.userId, users.id))
+      .orderBy(desc(orders.createdAt));
 
     // Get all order items with product details
     const allOrderItems = await db.select({
@@ -354,8 +354,8 @@ export const exportOrders = async (req: Request, res: Response) => {
       productSku: products.sku,
       productCategory: products.category
     })
-    .from(orderItems)
-    .leftJoin(products, eq(orderItems.productId, products.id));
+      .from(orderItems)
+      .leftJoin(products, eq(orderItems.productId, products.id));
 
     // Group order items by order ID
     const itemsByOrderId: Record<number, any[]> = {};

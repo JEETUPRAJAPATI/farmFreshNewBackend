@@ -19,9 +19,10 @@ import {
   Discount, InsertDiscount,
   DiscountUsage, InsertDiscountUsage,
   SiteSetting, InsertSiteSetting,
+  Category, InsertCategory,
   products, farmers, carts, cartItems, testimonials, newsletterSubscriptions, productReviews,
   users, payments, subscriptions, subscriptionStatusEnum, contactMessages, orders, orderItems, teamMembers,
-  discounts, discountUsage, siteSettings
+  discounts, discountUsage, siteSettings, categories, insertCategorySchema
 } from './shared/schema';
 import { productData } from './productData';
 import { farmerData } from './farmerData';
@@ -85,6 +86,12 @@ export interface IStorage {
   resetPasswordRequest(email: string): Promise<boolean>;
   resetPassword(token: string, newPassword: string): Promise<boolean>;
 
+  // Password Reset Methods
+  updateUserResetToken(userId: number, resetToken: string, resetTokenExpiry: Date): Promise<void>;
+  getUserByResetToken(token: string): Promise<User | undefined>;
+  updateUserPassword(userId: number, hashedPassword: string): Promise<void>;
+  clearUserResetToken(userId: number): Promise<void>;
+
   // Payments
   createPayment(payment: InsertPayment): Promise<Payment>;
   getPaymentsByUserId(userId: number): Promise<Payment[]>;
@@ -124,6 +131,15 @@ export interface IStorage {
   validateDiscountById(id: number, userId?: number, cartTotal?: number): Promise<{ valid: boolean; discount?: Discount; error?: string }>;
   applyDiscount(discountId: number, userId?: number, sessionId?: string, orderId?: number): Promise<DiscountUsage>;
   getDiscountUsage(discountId: number, userId?: number): Promise<number>;
+
+  // Categories and Subcategories
+  getAllCategories(): Promise<Category[]>;
+  getMainCategories(): Promise<Category[]>;
+  getSubcategoriesByParent(parentId: number): Promise<Category[]>;
+  getCategoryById(id: number): Promise<Category | undefined>;
+  createCategory(category: InsertCategory): Promise<Category>;
+  updateCategory(id: number, category: Partial<InsertCategory>): Promise<Category>;
+  deleteCategory(id: number): Promise<void>;
 
   // Site Settings Methods
   getSiteSetting(key: string): Promise<SiteSetting | undefined>;
@@ -895,13 +911,13 @@ export class DatabaseStorage implements IStorage {
     const deliveredOrders = await db.select({
       orderId: orders.id
     })
-    .from(orders)
-    .innerJoin(orderItems, eq(orders.id, orderItems.orderId))
-    .where(and(
-      eq(orders.userId, userId),
-      eq(orderItems.productId, productId),
-      eq(orders.status, "delivered") // Only delivered orders qualify for review
-    ));
+      .from(orders)
+      .innerJoin(orderItems, eq(orders.id, orderItems.orderId))
+      .where(and(
+        eq(orders.userId, userId),
+        eq(orderItems.productId, productId),
+        eq(orders.status, "delivered") // Only delivered orders qualify for review
+      ));
 
     return deliveredOrders.length > 0;
   }
@@ -1071,9 +1087,9 @@ export class DatabaseStorage implements IStorage {
       quantity: cartItems.quantity,
       product: products
     })
-    .from(cartItems)
-    .where(eq(cartItems.cartId, cart.id))
-    .innerJoin(products, eq(cartItems.productId, products.id));
+      .from(cartItems)
+      .where(eq(cartItems.cartId, cart.id))
+      .innerJoin(products, eq(cartItems.productId, products.id));
 
     const subtotal = items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
     const shipping = subtotal > 0 ? 4.99 : 0;
@@ -1242,6 +1258,43 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
+  // Password Reset Methods
+  async updateUserResetToken(userId: number, resetToken: string, resetTokenExpiry: Date): Promise<void> {
+    await db.update(users)
+      .set({
+        resetToken,
+        resetTokenExpiry,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    const [user] = await db.select()
+      .from(users)
+      .where(eq(users.resetToken, token));
+    return user;
+  }
+
+  async updateUserPassword(userId: number, hashedPassword: string): Promise<void> {
+    await db.update(users)
+      .set({
+        password: hashedPassword,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async clearUserResetToken(userId: number): Promise<void> {
+    await db.update(users)
+      .set({
+        resetToken: null,
+        resetTokenExpiry: null,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId));
+  }
+
   // Payment methods
   async createPayment(payment: InsertPayment): Promise<Payment> {
     const [newPayment] = await db
@@ -1357,9 +1410,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrdersByUserId(userId: number): Promise<Order[]> {
-    return await db.select().from(orders)
+    console.log('Querying orders for user ID:', userId);
+    const result = await db.select().from(orders)
       .where(eq(orders.userId, userId))
       .orderBy(desc(orders.createdAt));
+    console.log('Found orders count:', result.length, 'for user:', userId);
+    return result;
   }
 
   async getOrderById(id: number): Promise<Order | undefined> {
@@ -1376,9 +1432,9 @@ export class DatabaseStorage implements IStorage {
       price: orderItems.price,
       productName: products.name
     })
-    .from(orderItems)
-    .innerJoin(products, eq(orderItems.productId, products.id))
-    .where(eq(orderItems.orderId, orderId));
+      .from(orderItems)
+      .innerJoin(products, eq(orderItems.productId, products.id))
+      .where(eq(orderItems.orderId, orderId));
   }
 
   async updateOrderStatus(id: number, status: string): Promise<Order> {
@@ -1645,6 +1701,59 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSiteSetting(key: string): Promise<void> {
     await db.delete(siteSettings).where(eq(siteSettings.key, key));
+  }
+
+  // Category management methods
+  async getAllCategories(): Promise<Category[]> {
+    return await db.select().from(categories).orderBy(categories.sortOrder, categories.name);
+  }
+
+  async getMainCategories(): Promise<Category[]> {
+    return await db.select().from(categories)
+      .where(and(
+        sql`${categories.parentId} IS NULL`,
+        eq(categories.isActive, true)
+      ))
+      .orderBy(categories.sortOrder, categories.name);
+  }
+
+  async getSubcategoriesByParent(parentId: number): Promise<Category[]> {
+    return await db.select().from(categories)
+      .where(and(
+        eq(categories.parentId, parentId),
+        eq(categories.isActive, true)
+      ))
+      .orderBy(categories.sortOrder, categories.name);
+  }
+
+  async getCategoryById(id: number): Promise<Category | undefined> {
+    const [category] = await db.select().from(categories).where(eq(categories.id, id));
+    return category;
+  }
+
+  async createCategory(categoryData: InsertCategory): Promise<Category> {
+    const [newCategory] = await db.insert(categories).values(categoryData).returning();
+    return newCategory;
+  }
+
+  async updateCategory(id: number, categoryData: Partial<InsertCategory>): Promise<Category> {
+    const [updatedCategory] = await db.update(categories)
+      .set({
+        ...categoryData,
+        updatedAt: new Date()
+      })
+      .where(eq(categories.id, id))
+      .returning();
+
+    if (!updatedCategory) {
+      throw new Error("Category not found");
+    }
+
+    return updatedCategory;
+  }
+
+  async deleteCategory(id: number): Promise<void> {
+    await db.delete(categories).where(eq(categories.id, id));
   }
 }
 

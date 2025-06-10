@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken';
 import * as crypto from 'crypto';
 import * as nodemailer from 'nodemailer';
 import Razorpay from 'razorpay';
+import { emailService } from './emailService';
 import {
   insertNewsletterSubscriptionSchema,
   insertUserSchema,
@@ -36,17 +37,34 @@ let razorpay: Razorpay;
 // Email configuration
 let transporter: nodemailer.Transporter;
 
-// Auth middleware - Use existing user with orders for demonstration
+// Auth middleware - Proper JWT verification
 const authenticate = async (req: Request, res: Response, next: NextFunction) => {
-  // Use the existing user that has orders in the database
-  const user = await storage.getUserById(4);
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
 
-  if (!user) {
-    return res.status(401).json({ message: 'User not found' });
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
+
+    const user = await storage.getUserById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid user' });
+    }
+
+    console.log('Authenticated user:', {
+      id: user.id,
+      email: user.email,
+      name: user.name
+    });
+
+    (req as any).user = user;
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error);
+    return res.status(401).json({ message: 'Authentication failed' });
   }
-
-  (req as any).user = user;
-  next();
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -108,8 +126,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (search) {
           const searchTerm = search.toLowerCase();
           const matchesSearch = product.name.toLowerCase().includes(searchTerm) ||
-                              product.description.toLowerCase().includes(searchTerm) ||
-                              product.shortDescription.toLowerCase().includes(searchTerm);
+            product.description.toLowerCase().includes(searchTerm) ||
+            product.shortDescription.toLowerCase().includes(searchTerm);
           if (!matchesSearch) return false;
         }
 
@@ -246,6 +264,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(farmer);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch farmer" });
+    }
+  });
+
+  // Categories and Subcategories API
+  app.get(`${apiPrefix}/categories`, async (req, res) => {
+    try {
+      const categories = await storage.getAllCategories();
+      res.json(categories);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch categories" });
+    }
+  });
+
+  app.get(`${apiPrefix}/categories/main`, async (req, res) => {
+    try {
+      const mainCategories = await storage.getMainCategories();
+      res.json(mainCategories);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch main categories" });
+    }
+  });
+
+  app.get(`${apiPrefix}/categories/:parentId/subcategories`, async (req, res) => {
+    try {
+      const parentId = parseInt(req.params.parentId);
+      if (isNaN(parentId)) {
+        return res.status(400).json({ message: "Invalid parent category ID" });
+      }
+
+      const subcategories = await storage.getSubcategoriesByParent(parentId);
+      res.json(subcategories);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch subcategories" });
+    }
+  });
+
+  app.get(`${apiPrefix}/categories/:id`, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid category ID" });
+      }
+
+      const category = await storage.getCategoryById(id);
+      if (!category) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+
+      res.json(category);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch category" });
     }
   });
 
@@ -749,6 +818,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('Payment recorded successfully:', payment);
 
+      // Send order notification email to admin
+      try {
+        const orderItems = await storage.getOrderItemsByOrderId(order.id);
+        const orderItemsWithProducts = await Promise.all(
+          orderItems.map(async (item) => {
+            const product = await storage.getProductById(item.productId);
+            return {
+              ...item,
+              product: product
+            };
+          })
+        );
+
+        // Debug: Log actual user data being sent in email
+        console.log('Sending email with user data:', {
+          userId: user.id,
+          customerEmail: user.email,
+          customerName: user.name,
+          orderId: order.id
+        });
+
+        await emailService.sendOrderNotificationToAdmin({
+          order,
+          orderItems: orderItemsWithProducts,
+          customerEmail: user.email,
+          customerName: user.name || 'Customer',
+          totalAmount: amount / 100
+        });
+
+        console.log('Order notification email sent to admin successfully');
+      } catch (emailError) {
+        console.error('Failed to send order notification email:', emailError);
+        // Don't fail the order creation if email fails
+      }
+
       // Clear the cart after successful order creation
       console.log('Clearing cart for sessionId:', sessionId);
       await storage.clearCart(sessionId);
@@ -777,6 +881,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: errorMessage,
         details: error instanceof Error ? error.message : "Unknown error occurred"
       });
+    }
+  });
+
+  // Password Reset Routes
+
+  // Forgot password - Send reset email
+  app.post(`${apiPrefix}/auth/forgot-password`, async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      // Find user by email
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Don't reveal if email exists for security
+        return res.json({ message: "If your email is registered, you will receive a password reset link shortly." });
+      }
+
+      // Generate reset token
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
+
+      // Save reset token to user
+      await storage.updateUserResetToken(user.id, resetToken, resetTokenExpiry);
+
+      // Send reset email
+      await emailService.sendPasswordResetEmail(user, resetToken);
+
+      res.json({ message: "If your email is registered, you will receive a password reset link shortly." });
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      res.status(500).json({ message: "Failed to process password reset request" });
+    }
+  });
+
+  // Reset password with token
+  app.post(`${apiPrefix}/auth/reset-password`, async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token || !newPassword) {
+        return res.status(400).json({ message: "Token and new password are required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters long" });
+      }
+
+      // Find user with valid reset token
+      const user = await storage.getUserByResetToken(token);
+      if (!user) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
+
+      // Check if token is expired
+      if (!user.resetTokenExpiry || new Date() > user.resetTokenExpiry) {
+        return res.status(400).json({ message: "Reset token has expired" });
+      }
+
+      // Hash new password
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      // Update user password and clear reset token
+      await storage.updateUserPassword(user.id, hashedPassword);
+      await storage.clearUserResetToken(user.id);
+
+      // Send confirmation email
+      try {
+        await emailService.sendPasswordResetConfirmation(user);
+      } catch (emailError) {
+        console.error('Failed to send password reset confirmation email:', emailError);
+        // Don't fail the password reset if email fails
+      }
+
+      res.json({ message: "Password successfully reset" });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      res.status(500).json({ message: "Failed to reset password" });
     }
   });
 
@@ -865,7 +1050,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(`${apiPrefix}/orders/history`, authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
+      console.log('Fetching orders for user ID:', user.id);
       const orders = await storage.getOrdersByUserId(user.id);
+      console.log('Retrieved orders:', orders.length, 'for user', user.id);
 
       // Fetch comprehensive order details for each order
       const ordersWithDetails = await Promise.all(
@@ -1541,6 +1728,235 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Active discounts fetch error:', error);
       res.status(500).json({ message: "Failed to fetch active discounts" });
+    }
+  });
+
+  // ===== CATEGORY MANAGEMENT ROUTES =====
+
+  // Helper function to generate slug from name
+  const generateSlug = (name: string): string => {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+      .trim()
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-'); // Replace multiple hyphens with single hyphen
+  };
+
+  // Get all categories (main categories only)
+  app.get('/api/admin/categories', authenticate, async (req, res) => {
+    try {
+      const categories = await storage.getMainCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error('Get categories error:', error);
+      res.status(500).json({ message: 'Failed to fetch categories' });
+    }
+  });
+
+  // Get all categories with subcategories
+  app.get('/api/admin/categories/all', authenticate, async (req, res) => {
+    try {
+      const categories = await storage.getAllCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error('Get all categories error:', error);
+      res.status(500).json({ message: 'Failed to fetch categories' });
+    }
+  });
+
+  // Create a new category
+  app.post('/api/admin/categories', authenticate, async (req, res) => {
+    try {
+      const categoryData = req.body;
+
+      // Validate required fields
+      if (!categoryData.name) {
+        return res.status(400).json({ message: 'Category name is required' });
+      }
+
+      // Generate slug if not provided
+      if (!categoryData.slug) {
+        categoryData.slug = generateSlug(categoryData.name);
+      }
+
+      const newCategory = await storage.createCategory(categoryData);
+      res.status(201).json(newCategory);
+    } catch (error) {
+      console.error('Create category error:', error);
+      res.status(500).json({ message: 'Failed to create category' });
+    }
+  });
+
+  // Update a category
+  app.put('/api/admin/categories/:id', authenticate, async (req, res) => {
+    try {
+      const categoryId = parseInt(req.params.id);
+      const updateData = req.body;
+
+      if (isNaN(categoryId)) {
+        return res.status(400).json({ message: 'Invalid category ID' });
+      }
+
+      // Generate slug if name is being updated and slug is not provided
+      if (updateData.name && !updateData.slug) {
+        updateData.slug = generateSlug(updateData.name);
+      }
+
+      const updatedCategory = await storage.updateCategory(categoryId, updateData);
+      res.json(updatedCategory);
+    } catch (error) {
+      console.error('Update category error:', error);
+      res.status(500).json({ message: 'Failed to update category' });
+    }
+  });
+
+  // Delete a category
+  app.delete('/api/admin/categories/:id', authenticate, async (req, res) => {
+    try {
+      const categoryId = parseInt(req.params.id);
+
+      if (isNaN(categoryId)) {
+        return res.status(400).json({ message: 'Invalid category ID' });
+      }
+
+      // Check if category has products
+      const allProducts = await storage.getAllEnhancedProducts();
+      const category = await storage.getCategoryById(categoryId);
+
+      if (!category) {
+        return res.status(404).json({ message: 'Category not found' });
+      }
+
+      const productsUsingCategory = allProducts.filter(product =>
+        product.category === category.name
+      );
+
+      if (productsUsingCategory.length > 0) {
+        return res.status(400).json({
+          message: `Cannot delete category. ${productsUsingCategory.length} products are using this category.`,
+          productsCount: productsUsingCategory.length
+        });
+      }
+
+      await storage.deleteCategory(categoryId);
+      res.json({ message: 'Category deleted successfully' });
+    } catch (error) {
+      console.error('Delete category error:', error);
+      res.status(500).json({ message: 'Failed to delete category' });
+    }
+  });
+
+  // Get subcategories for a specific category
+  app.get('/api/admin/categories/:id/subcategories', authenticate, async (req, res) => {
+    try {
+      const categoryId = parseInt(req.params.id);
+
+      if (isNaN(categoryId)) {
+        return res.status(400).json({ message: 'Invalid category ID' });
+      }
+
+      const subcategories = await storage.getSubcategoriesByParent(categoryId);
+      res.json(subcategories);
+    } catch (error) {
+      console.error('Get subcategories error:', error);
+      res.status(500).json({ message: 'Failed to fetch subcategories' });
+    }
+  });
+
+  // Create a new subcategory
+  app.post('/api/admin/categories/:id/subcategories', authenticate, async (req, res) => {
+    try {
+      const parentId = parseInt(req.params.id);
+      const subcategoryData = req.body;
+
+      if (isNaN(parentId)) {
+        return res.status(400).json({ message: 'Invalid parent category ID' });
+      }
+
+      if (!subcategoryData.name) {
+        return res.status(400).json({ message: 'Subcategory name is required' });
+      }
+
+      // Verify parent category exists
+      const parentCategory = await storage.getCategoryById(parentId);
+      if (!parentCategory) {
+        return res.status(404).json({ message: 'Parent category not found' });
+      }
+
+      // Generate slug if not provided
+      if (!subcategoryData.slug) {
+        subcategoryData.slug = generateSlug(subcategoryData.name);
+      }
+
+      const newSubcategory = await storage.createCategory({
+        ...subcategoryData,
+        parentId: parentId
+      });
+
+      res.status(201).json(newSubcategory);
+    } catch (error) {
+      console.error('Create subcategory error:', error);
+      res.status(500).json({ message: 'Failed to create subcategory' });
+    }
+  });
+
+  // Update a subcategory
+  app.put('/api/admin/subcategories/:id', authenticate, async (req, res) => {
+    try {
+      const subcategoryId = parseInt(req.params.id);
+      const updateData = req.body;
+
+      if (isNaN(subcategoryId)) {
+        return res.status(400).json({ message: 'Invalid subcategory ID' });
+      }
+
+      // Generate slug if name is being updated and slug is not provided
+      if (updateData.name && !updateData.slug) {
+        updateData.slug = generateSlug(updateData.name);
+      }
+
+      const updatedSubcategory = await storage.updateCategory(subcategoryId, updateData);
+      res.json(updatedSubcategory);
+    } catch (error) {
+      console.error('Update subcategory error:', error);
+      res.status(500).json({ message: 'Failed to update subcategory' });
+    }
+  });
+
+  // Delete a subcategory
+  app.delete('/api/admin/subcategories/:id', authenticate, async (req, res) => {
+    try {
+      const subcategoryId = parseInt(req.params.id);
+
+      if (isNaN(subcategoryId)) {
+        return res.status(400).json({ message: 'Invalid subcategory ID' });
+      }
+
+      // Check if subcategory has products
+      const allProducts = await storage.getAllEnhancedProducts();
+      const subcategory = await storage.getCategoryById(subcategoryId);
+
+      if (!subcategory) {
+        return res.status(404).json({ message: 'Subcategory not found' });
+      }
+
+      const productsUsingSubcategory = allProducts.filter(product =>
+        product.subcategory === subcategory.name
+      );
+
+      if (productsUsingSubcategory.length > 0) {
+        return res.status(400).json({
+          message: `Cannot delete subcategory. ${productsUsingSubcategory.length} products are using this subcategory.`,
+          productsCount: productsUsingSubcategory.length
+        });
+      }
+
+      await storage.deleteCategory(subcategoryId);
+      res.json({ message: 'Subcategory deleted successfully' });
+    } catch (error) {
+      console.error('Delete subcategory error:', error);
+      res.status(500).json({ message: 'Failed to delete subcategory' });
     }
   });
 
