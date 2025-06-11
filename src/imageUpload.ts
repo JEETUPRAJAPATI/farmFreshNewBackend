@@ -86,7 +86,7 @@ export const processImage = async (
       })
       .toFile(sizedPath);
 
-    a additionalSizes.push(`${baseUrl}/uploads/products/${sizedFilename}`);
+    additionalSizes.push(`${baseUrl}/uploads/products/${sizedFilename}`);
   }
 
   return {
