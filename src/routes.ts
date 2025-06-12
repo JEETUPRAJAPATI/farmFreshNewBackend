@@ -18,7 +18,7 @@ import {
   insertTeamMemberSchema,
   insertDiscountSchema,
   products
-} from "./shared/schema";
+} from "./shared/schema.ts";
 import { db } from './db';
 import { eq, sql, desc, asc } from 'drizzle-orm';
 import adminRouter from './admin';
@@ -111,6 +111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         limit = '12',
         search = '',
         category = '',
+        subcategory = '',
         minPrice = '',
         maxPrice = '',
         sortBy = 'id',
@@ -134,6 +135,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Category filter
         if (category && category !== 'all') {
           if (product.category !== category) return false;
+        }
+
+        // Subcategory filter
+        if (subcategory && subcategory !== 'all') {
+          if (product.subcategory !== subcategory) return false;
         }
 
         // Price filters
@@ -2005,22 +2011,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Export specific table
-  app.get('/api/admin/database/export/:tableName', async (req, res) => {
-    try {
-      const tableName = req.params.tableName;
-      const exportPath = await exportTable(tableName);
-
-      res.json({
-        message: `Table ${tableName} exported successfully`,
-        filePath: exportPath,
-        downloadUrl: `/api/admin/database/download/${path.basename(exportPath)}`
-      });
-    } catch (error) {
-      console.error(`Table export error for ${req.params.tableName}:`, error);
-      res.status(500).json({ message: `Failed to export table ${req.params.tableName}` });
-    }
-  });
 
 
   // Initialize Razorpay and Email service when environment variables are available
