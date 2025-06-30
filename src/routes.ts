@@ -1,13 +1,13 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { v4 as uuidv4 } from 'uuid';
-import * as bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import * as crypto from 'crypto';
-import * as nodemailer from 'nodemailer';
-import Razorpay from 'razorpay';
-import { emailService } from './emailService';
+import { v4 as uuidv4 } from "uuid";
+import * as bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import * as crypto from "crypto";
+import * as nodemailer from "nodemailer";
+import Razorpay from "razorpay";
+import { emailService } from "./emailService";
 import {
   insertNewsletterSubscriptionSchema,
   insertUserSchema,
@@ -17,19 +17,19 @@ import {
   insertContactMessageSchema,
   insertTeamMemberSchema,
   insertDiscountSchema,
-  products
+  products,
 } from "./shared/schema.ts";
-import { db } from './db';
-import { eq, sql, desc, asc } from 'drizzle-orm';
-import adminRouter from './admin';
-import imageRouter from './imageRoutes';
-import { exportDatabase, exportTable } from './databaseExport';
-import path from 'path';
-import express from 'express';
+import { db } from "./db";
+import { eq, sql, desc, asc } from "drizzle-orm";
+import adminRouter from "./admin";
+import imageRouter from "./imageRoutes";
+import { exportDatabase, exportTable } from "./databaseExport";
+import path from "path";
+import express from "express";
 
 // JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const JWT_EXPIRY = '24h';
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+const JWT_EXPIRY = "24h";
 
 // Initialize Razorpay
 let razorpay: Razorpay;
@@ -38,46 +38,50 @@ let razorpay: Razorpay;
 let transporter: nodemailer.Transporter;
 
 // Auth middleware - Proper JWT verification
-const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+const authenticate = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Authentication required' });
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Authentication required" });
     }
 
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
 
     const user = await storage.getUserById(decoded.userId);
     if (!user) {
-      return res.status(401).json({ message: 'Invalid user' });
+      return res.status(401).json({ message: "Invalid user" });
     }
 
-    console.log('Authenticated user:', {
+    console.log("Authenticated user:", {
       id: user.id,
       email: user.email,
-      name: user.name
+      name: user.name,
     });
 
     (req as any).user = user;
     next();
   } catch (error) {
-    console.error('Authentication error:', error);
-    return res.status(401).json({ message: 'Authentication failed' });
+    console.error("Authentication error:", error);
+    return res.status(401).json({ message: "Authentication failed" });
   }
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API route prefix
-  const apiPrefix = '/api';
+  const apiPrefix = "/api";
 
   // Get session ID middleware
   const getSessionId = (req: Request, res: Response, next: Function) => {
-    let sessionId = req.headers['x-session-id'] as string;
+    let sessionId = req.headers["x-session-id"] as string;
 
     if (!sessionId) {
       sessionId = uuidv4();
-      res.setHeader('X-Session-Id', sessionId);
+      res.setHeader("X-Session-Id", sessionId);
     }
 
     (req as any).sessionId = sessionId;
@@ -87,7 +91,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(getSessionId);
 
   // Serve uploaded images statically
-  app.use('/uploads', express.static(path.join(process.cwd(), 'public/uploads')));
+  app.use(
+    "/uploads",
+    express.static(path.join(process.cwd(), "public/uploads"))
+  );
 
   // Register admin routes
   app.use(`${apiPrefix}/admin`, adminRouter);
@@ -100,45 +107,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Add cache-busting headers
       res.set({
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
       });
 
       const allProducts = await storage.getAllProducts();
       const {
-        page = '1',
-        limit = '12',
-        search = '',
-        category = '',
-        subcategory = '',
-        minPrice = '',
-        maxPrice = '',
-        sortBy = 'id',
-        sortOrder = 'desc'
+        page = "1",
+        limit = "12",
+        search = "",
+        category = "",
+        subcategory = "",
+        minPrice = "",
+        maxPrice = "",
+        sortBy = "id",
+        sortOrder = "desc",
       } = req.query as Record<string, string>;
 
       const pageNumber = parseInt(page);
       const limitNumber = parseInt(limit);
 
       // Apply filters
-      let filteredProducts = allProducts.filter(product => {
+      let filteredProducts = allProducts.filter((product) => {
         // Search filter
         if (search) {
           const searchTerm = search.toLowerCase();
-          const matchesSearch = product.name.toLowerCase().includes(searchTerm) ||
+          const matchesSearch =
+            product.name.toLowerCase().includes(searchTerm) ||
             product.description.toLowerCase().includes(searchTerm) ||
             product.shortDescription.toLowerCase().includes(searchTerm);
           if (!matchesSearch) return false;
         }
 
         // Category filter
-        if (category && category !== 'all') {
+        if (category && category !== "all") {
           if (product.category !== category) return false;
         }
 
         // Subcategory filter
-        if (subcategory && subcategory !== 'all') {
+        if (subcategory && subcategory !== "all") {
           if (product.subcategory !== subcategory) return false;
         }
 
@@ -160,22 +168,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       filteredProducts.sort((a, b) => {
         let comparison = 0;
 
-        if (sortBy === 'price') {
+        if (sortBy === "price") {
           comparison = a.price - b.price;
-        } else if (sortBy === 'name') {
+        } else if (sortBy === "name") {
           comparison = a.name.localeCompare(b.name);
         } else {
           comparison = a.id - b.id;
         }
 
-        return sortOrder === 'asc' ? comparison : -comparison;
+        return sortOrder === "asc" ? comparison : -comparison;
       });
 
       // Calculate pagination
       const total = filteredProducts.length;
       const totalPages = Math.ceil(total / limitNumber);
       const offset = (pageNumber - 1) * limitNumber;
-      const paginatedProducts = filteredProducts.slice(offset, offset + limitNumber);
+      const paginatedProducts = filteredProducts.slice(
+        offset,
+        offset + limitNumber
+      );
 
       res.json({
         products: paginatedProducts,
@@ -185,11 +196,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           limit: limitNumber,
           totalPages,
           hasNextPage: pageNumber < totalPages,
-          hasPrevPage: pageNumber > 1
-        }
+          hasPrevPage: pageNumber > 1,
+        },
       });
     } catch (error) {
-      console.error('Error fetching products:', error);
+      console.error("Error fetching products:", error);
       res.status(500).json({ message: "Failed to fetch products" });
     }
   });
@@ -292,23 +303,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get(`${apiPrefix}/categories/:parentId/subcategories`, async (req, res) => {
-    try {
-      const parentId = parseInt(req.params.parentId);
-      if (isNaN(parentId)) {
-        return res.status(400).json({ message: "Invalid parent category ID" });
-      }
+  app.get(
+    `${apiPrefix}/categories/:parentId/subcategories`,
+    async (req, res) => {
+      try {
+        const parentId = parseInt(req.params.parentId);
+        if (isNaN(parentId)) {
+          return res
+            .status(400)
+            .json({ message: "Invalid parent category ID" });
+        }
 
-      const subcategories = await storage.getSubcategoriesByParent(parentId);
-      res.json(subcategories);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch subcategories" });
+        const subcategories = await storage.getSubcategoriesByParent(parentId);
+        res.json(subcategories);
+      } catch (error) {
+        res.status(500).json({ message: "Failed to fetch subcategories" });
+      }
     }
-  });
+  );
 
   app.get(`${apiPrefix}/categories/:id`, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
+      console.log(id);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid category ID" });
       }
@@ -348,7 +365,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const reviewData = {
         ...req.body,
-        productId
+        productId,
       };
 
       const newReview = await storage.addProductReview(reviewData);
@@ -375,8 +392,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { productId, quantity } = req.body;
       const sessionId = (req as any).sessionId;
 
-      if (typeof productId !== 'number' || typeof quantity !== 'number' || quantity <= 0) {
-        return res.status(400).json({ message: "Invalid product ID or quantity" });
+      if (
+        typeof productId !== "number" ||
+        typeof quantity !== "number" ||
+        quantity <= 0
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Invalid product ID or quantity" });
       }
 
       const cart = await storage.addToCart(sessionId, productId, quantity);
@@ -393,8 +416,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { quantity } = req.body;
       const sessionId = (req as any).sessionId;
 
-      if (isNaN(productId) || typeof quantity !== 'number') {
-        return res.status(400).json({ message: "Invalid product ID or quantity" });
+      if (isNaN(productId) || typeof quantity !== "number") {
+        return res
+          .status(400)
+          .json({ message: "Invalid product ID or quantity" });
       }
 
       const cart = await storage.updateCartItem(sessionId, productId, quantity);
@@ -446,8 +471,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Subscribe to newsletter
   app.post(`${apiPrefix}/newsletter/subscribe`, async (req, res) => {
     try {
-      const subscriptionData = insertNewsletterSubscriptionSchema.parse(req.body);
-      const subscription = await storage.addNewsletterSubscription(subscriptionData);
+      const subscriptionData = insertNewsletterSubscriptionSchema.parse(
+        req.body
+      );
+      const subscription = await storage.addNewsletterSubscription(
+        subscriptionData
+      );
       res.json({ message: "Subscription successful", subscription });
     } catch (error) {
       if (error instanceof Error) {
@@ -470,18 +499,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(userData.password, salt);
 
+      // Generate reset token
+
       // Create user with hashed password and mark as already verified
       const user = await storage.createUser({
         ...userData,
         password: hashedPassword,
-        emailVerified: true
+        emailVerified: true,
       });
 
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const resetTokenExpiry = new Date(Date.now() + 3600000);
+
+      // Save reset token to user
+      await storage.createUserToken(user.id, resetToken, resetTokenExpiry);
       // Return success message without exposing password
       const { password, ...userWithoutPassword } = user;
+      await emailService.registerEmail(user, resetToken);
+
       res.status(201).json({
         message: "Registration successful. You can now log in.",
-        user: userWithoutPassword
+        user: userWithoutPassword,
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -501,7 +539,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (success) {
         res.json({ message: "Email verified successfully" });
       } else {
-        res.status(400).json({ message: "Invalid or expired verification token" });
+        res
+          .status(400)
+          .json({ message: "Invalid or expired verification token" });
       }
     } catch (error) {
       res.status(500).json({ message: "Failed to verify email" });
@@ -517,40 +557,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user exists
       const user = await storage.getUserByEmail(email);
       if (!user) {
-        console.log('User not found in database');
+        console.log("User not found in database");
         return res.status(400).json({ message: "Invalid email or password" });
       }
 
-      console.log('User found, verifying password');
+      console.log("User found, verifying password");
 
       try {
         // Verify password
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) {
-          console.log('Password verification failed');
+          console.log("Password verification failed");
           return res.status(400).json({ message: "Invalid email or password" });
         }
 
-        console.log('Password verified, generating token');
+        console.log("Password verified, generating token");
 
         // Generate JWT token
-        const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+        const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
+          expiresIn: JWT_EXPIRY,
+        });
 
         // Return token and user data without password
         const { password: _, ...userWithoutPassword } = user;
-        console.log('Login successful');
+        console.log("Login successful");
 
         return res.json({
           message: "Login successful",
           token,
-          user: userWithoutPassword
+          user: userWithoutPassword,
         });
       } catch (pwError) {
-        console.error('Error during password verification:', pwError);
-        return res.status(400).json({ message: "Password verification failed" });
+        console.error("Error during password verification:", pwError);
+        return res
+          .status(400)
+          .json({ message: "Password verification failed" });
       }
     } catch (error) {
-      console.error('Login error:', error);
+      console.error("Login error:", error);
       res.status(500).json({ message: "Login failed" });
     }
   });
@@ -563,20 +607,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (success && transporter) {
         const user = await storage.getUserByEmail(email);
-        const resetUrl = `${req.protocol}://${req.get('host')}/reset-password/${user?.resetToken}`;
+        const resetUrl = `${req.protocol}://${req.get("host")}/reset-password/${
+          user?.resetToken
+        }`;
 
         await transporter.sendMail({
-          from: 'noreply@yourstore.com',
+          from: "noreply@yourstore.com",
           to: email,
-          subject: 'Reset Your Password',
-          html: `<p>Please click <a href="${resetUrl}">here</a> to reset your password.</p>`
+          subject: "Reset Your Password",
+          html: `<p>Please click <a href="${resetUrl}">here</a> to reset your password.</p>`,
         });
       }
 
       // Always return success to prevent email enumeration
-      res.json({ message: "If your email is registered, you will receive a password reset link" });
+      res.json({
+        message:
+          "If your email is registered, you will receive a password reset link",
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to process password reset request" });
+      res
+        .status(500)
+        .json({ message: "Failed to process password reset request" });
     }
   });
 
@@ -627,7 +678,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         message: "Profile updated successfully",
-        user: userWithoutPassword
+        user: userWithoutPassword,
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to update profile" });
@@ -637,66 +688,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Payment Routes
 
   // Initialize Razorpay
-  app.post(`${apiPrefix}/payments/initialize`, authenticate, async (req, res) => {
-    try {
-      // Check if Razorpay is initialized
-      if (!razorpay) {
-        // Initialize Razorpay with API keys
-        const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
-        const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
-
-        if (!razorpayKeyId || !razorpayKeySecret) {
-          return res.status(500).json({ message: "Razorpay API keys not configured" });
-        }
-
-        try {
-          razorpay = new Razorpay({
-            key_id: razorpayKeyId,
-            key_secret: razorpayKeySecret
-          });
-          console.log("Razorpay initialized successfully for payment");
-        } catch (initError) {
-          console.error("Failed to initialize Razorpay instance:", initError);
-          return res.status(500).json({ message: "Failed to initialize payment gateway", error: String(initError) });
-        }
-      }
-
-      const user = (req as any).user;
-      const { amount, currency = 'INR' } = req.body;
-
-      if (!amount || isNaN(amount) || amount <= 0) {
-        return res.status(400).json({ message: "Invalid amount specified", error: "Amount must be a positive number" });
-      }
-
-      // Create Razorpay order
-      const options = {
-        amount: Math.round(amount * 100), // Razorpay expects amount in smallest currency unit (paise)
-        currency,
-        receipt: `receipt_order_${Date.now()}`,
-        payment_capture: 1
-      };
-
-      console.log("Creating Razorpay order with options:", options);
-
+  app.post(
+    `${apiPrefix}/payments/initialize`,
+    authenticate,
+    async (req, res) => {
       try {
-        const order = await razorpay.orders.create(options);
-        console.log("Razorpay order created:", order);
+        // Check if Razorpay is initialized
+        if (!razorpay) {
+          // Initialize Razorpay with API keys
+          const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+          const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
 
-        res.json({
-          orderId: order.id,
-          amount: order.amount,
-          currency: order.currency,
-          keyId: process.env.RAZORPAY_KEY_ID
+          if (!razorpayKeyId || !razorpayKeySecret) {
+            return res
+              .status(500)
+              .json({ message: "Razorpay API keys not configured" });
+          }
+
+          try {
+            razorpay = new Razorpay({
+              key_id: razorpayKeyId,
+              key_secret: razorpayKeySecret,
+            });
+            console.log("Razorpay initialized successfully for payment");
+          } catch (initError) {
+            console.error("Failed to initialize Razorpay instance:", initError);
+            return res.status(500).json({
+              message: "Failed to initialize payment gateway",
+              error: String(initError),
+            });
+          }
+        }
+
+        const user = (req as any).user;
+        const { amount, currency = "INR" } = req.body;
+
+        if (!amount || isNaN(amount) || amount <= 0) {
+          return res.status(400).json({
+            message: "Invalid amount specified",
+            error: "Amount must be a positive number",
+          });
+        }
+
+        
+        const options = {
+          amount: Math.round(amount * 100),
+          currency,
+          receipt: `receipt_order_${Date.now()}`,
+          payment_capture: 1,
+        };
+        try {
+          const order = await razorpay.orders.create(options);
+          console.log("Razorpay order created:", order);
+          res.json({
+            orderId: order.id,
+            amount: order.amount,
+            currency: order.currency,
+            keyId: process.env.RAZORPAY_KEY_ID,
+            
+          });
+        } catch (orderError) {
+          console.error("Failed to create Razorpay order:", orderError);
+          return res.status(500).json({
+            message: "Failed to create payment order",
+            error: String(orderError),
+          });
+        }
+      } catch (error) {
+        console.error("Payment initialization error:", error);
+        res.status(500).json({
+          message: "Failed to initialize payment",
+          error: error instanceof Error ? error.message : String(error),
         });
-      } catch (orderError) {
-        console.error("Failed to create Razorpay order:", orderError);
-        return res.status(500).json({ message: "Failed to create payment order", error: String(orderError) });
       }
-    } catch (error) {
-      console.error('Payment initialization error:', error);
-      res.status(500).json({ message: "Failed to initialize payment", error: error instanceof Error ? error.message : String(error) });
     }
-  });
+  );
 
   // Verify payment and create order
   app.post(`${apiPrefix}/payments/verify`, authenticate, async (req, res) => {
@@ -708,54 +774,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
         razorpayOrderId,
         razorpaySignature,
         amount,
-        currency = 'INR',
-        shippingAddress
+        currency = "INR",
+        shippingAddress,
+        
       } = req.body;
 
-      console.log('Payment verification request:', {
+      console.log("Payment verification request:", {
         userId: user.id,
         sessionId,
         razorpayPaymentId,
         razorpayOrderId,
         amount,
-        currency
+        currency,
+        
       });
 
       // Validate required fields
       if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
-        return res.status(400).json({ message: "Missing required payment fields" });
+        return res
+          .status(400)
+          .json({ message: "Missing required payment fields" });
       }
 
       // Verify the payment signature
       const body = razorpayOrderId + "|" + razorpayPaymentId;
       const expectedSignature = crypto
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || '')
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
         .update(body)
         .digest("hex");
 
       if (expectedSignature !== razorpaySignature) {
-        console.error('Payment signature verification failed:', {
+        console.error("Payment signature verification failed:", {
           expected: expectedSignature,
-          received: razorpaySignature
+          received: razorpaySignature,
         });
         return res.status(400).json({ message: "Invalid payment signature" });
       }
 
-      console.log('Payment signature verified successfully');
+      console.log("Payment signature verified successfully");
 
       // Get the current cart
       const cart = await storage.getCart(sessionId);
 
       if (!cart.items || cart.items.length === 0) {
-        return res.status(400).json({ message: "No items in cart to create order" });
+        return res
+          .status(400)
+          .json({ message: "No items in cart to create order" });
       }
 
       // Validate stock availability for all items before creating order
       const stockValidationPromises = cart.items.map(async (item) => {
-        const isAvailable = await storage.validateStockAvailability(item.product.id, item.quantity);
+        const isAvailable = await storage.validateStockAvailability(
+          item.product.id,
+          item.quantity
+        );
         if (!isAvailable) {
           const product = await storage.getProductById(item.product.id);
-          throw new Error(`Insufficient stock for ${item.product.name}. Available: ${product?.stockQuantity || 0}, Requested: ${item.quantity}`);
+          throw new Error(
+            `Insufficient stock for ${item.product.name}. Available: ${
+              product?.stockQuantity || 0
+            }, Requested: ${item.quantity}`
+          );
         }
         return true;
       });
@@ -763,66 +842,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         await Promise.all(stockValidationPromises);
       } catch (stockError) {
-        return res.status(400).json({ message: stockError instanceof Error ? stockError.message : 'Stock validation failed' });
+        return res.status(400).json({
+          message:
+            stockError instanceof Error
+              ? stockError.message
+              : "Stock validation failed",
+        });
       }
 
-      console.log('Starting order creation process...');
-
+      console.log("Starting order creation process...");
       // Create the order
-      console.log('Creating order with data:', {
+      console.log("Creating order with data:", {
         userId: user.id,
         sessionId,
         paymentId: razorpayPaymentId,
         total: amount / 100,
-        status: 'confirmed',
-        shippingAddress: shippingAddress || 'No address provided',
-        paymentMethod: 'razorpay'
+        status: "confirmed",
+        shippingAddress: shippingAddress || "No address provided",
+        paymentMethod: "razorpay",
       });
 
+      const generateRandomId = () => {
+        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const numbers = "0123456789";
+
+        let result = "";
+        for (let i = 0; i < 3; i++) {
+          result += letters.charAt(
+            Math.floor(Math.random() * letters.length)
+          );
+        }
+
+        for (let i = 0; i < 3; i++) {
+          result += numbers.charAt(
+            Math.floor(Math.random() * numbers.length)
+          );
+        }
+
+        return result;
+      };
+
+      const randomId = generateRandomId();
       const order = await storage.createOrder({
         userId: user.id,
         sessionId,
         paymentId: razorpayPaymentId,
-        total: amount / 100, // Convert back to main currency unit
-        status: 'confirmed',
-        shippingAddress: shippingAddress || 'No address provided',
-        paymentMethod: 'razorpay'
+        total: amount / 100,
+        status: "confirmed",
+        shippingAddress: shippingAddress || "No address provided",
+        paymentMethod: "razorpay",
+        trackingId: randomId,
       });
 
-      console.log('Order created successfully:', order);
+      console.log("Order created successfully:", order);
 
       // Create order items with automatic stock deduction
-      console.log('Creating order items for', cart.items.length, 'items');
+      console.log("Creating order items for", cart.items.length, "items");
       for (const item of cart.items) {
-        console.log('Processing order item:', {
+        console.log("Processing order item:", {
           orderId: order.id,
           productId: item.product.id,
           quantity: item.quantity,
-          price: item.product.price
+          price: item.product.price,
         });
 
         await storage.createOrderItem({
           orderId: order.id,
           productId: item.product.id,
           quantity: item.quantity,
-          price: item.product.price
+          price: item.product.price,
         });
       }
 
-      console.log('All order items created successfully');
+      console.log("All order items created successfully");
 
       // Record the payment with order reference
-      console.log('Recording payment with order reference');
+      console.log("Recording payment with order reference");
       const payment = await storage.createPayment({
         userId: user.id,
         orderId: order.id,
         razorpayPaymentId,
         amount: amount / 100,
         currency,
-        status: 'completed'
+        status: "completed",
       });
 
-      console.log('Payment recorded successfully:', payment);
+      console.log("Payment recorded successfully:", payment);
 
       // Send order notification email to admin
       try {
@@ -832,60 +937,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const product = await storage.getProductById(item.productId);
             return {
               ...item,
-              product: product
+              product: product,
             };
           })
         );
 
         // Debug: Log actual user data being sent in email
-        console.log('Sending email with user data:', {
+        console.log("Sending email with user data:", {
           userId: user.id,
           customerEmail: user.email,
           customerName: user.name,
-          orderId: order.id
+          orderId: order.id,
         });
 
         await emailService.sendOrderNotificationToAdmin({
           order,
           orderItems: orderItemsWithProducts,
           customerEmail: user.email,
-          customerName: user.name || 'Customer',
-          totalAmount: amount / 100
+          customerName: user.name || "Customer",
+          totalAmount: amount / 100,
         });
 
-        console.log('Order notification email sent to admin successfully');
+        console.log("Order notification email sent to admin successfully");
       } catch (emailError) {
-        console.error('Failed to send order notification email:', emailError);
+        console.error("Failed to send order notification email:", emailError);
         // Don't fail the order creation if email fails
       }
 
       // Clear the cart after successful order creation
-      console.log('Clearing cart for sessionId:', sessionId);
+      console.log("Clearing cart for sessionId:", sessionId);
       await storage.clearCart(sessionId);
-      console.log('Cart cleared successfully');
+      console.log("Cart cleared successfully");
 
       res.json({
         message: "Payment successful and order created",
         payment,
-        order
+        order,
       });
     } catch (error) {
-      console.error('Payment verification error:', error);
+      console.error("Payment verification error:", error);
 
       // Provide detailed error information for debugging
       let errorMessage = "Payment verification failed";
       if (error instanceof Error) {
         errorMessage = error.message;
-        console.error('Detailed error:', {
+        console.error("Detailed error:", {
           message: error.message,
           stack: error.stack,
-          name: error.name
+          name: error.name,
         });
       }
 
       res.status(500).json({
         message: errorMessage,
-        details: error instanceof Error ? error.message : "Unknown error occurred"
+        details:
+          error instanceof Error ? error.message : "Unknown error occurred",
       });
     }
   });
@@ -905,11 +1011,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUserByEmail(email);
       if (!user) {
         // Don't reveal if email exists for security
-        return res.json({ message: "If your email is registered, you will receive a password reset link shortly." });
+        return res.json({
+          message:
+            "If your email is registered, you will receive a password reset link shortly.",
+        });
       }
 
       // Generate reset token
-      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetToken = crypto.randomBytes(32).toString("hex");
       const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
 
       // Save reset token to user
@@ -918,10 +1027,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send reset email
       await emailService.sendPasswordResetEmail(user, resetToken);
 
-      res.json({ message: "If your email is registered, you will receive a password reset link shortly." });
+      res.json({
+        message:
+          "If your email is registered, you will receive a password reset link shortly.",
+      });
     } catch (error) {
-      console.error('Forgot password error:', error);
-      res.status(500).json({ message: "Failed to process password reset request" });
+      console.error("Forgot password error:", error);
+      res
+        .status(500)
+        .json({ message: "Failed to process password reset request" });
     }
   });
 
@@ -931,17 +1045,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { token, newPassword } = req.body;
 
       if (!token || !newPassword) {
-        return res.status(400).json({ message: "Token and new password are required" });
+        return res
+          .status(400)
+          .json({ message: "Token and new password are required" });
       }
 
       if (newPassword.length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters long" });
+        return res
+          .status(400)
+          .json({ message: "Password must be at least 6 characters long" });
       }
 
       // Find user with valid reset token
       const user = await storage.getUserByResetToken(token);
       if (!user) {
-        return res.status(400).json({ message: "Invalid or expired reset token" });
+        return res
+          .status(400)
+          .json({ message: "Invalid or expired reset token" });
       }
 
       // Check if token is expired
@@ -960,13 +1080,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         await emailService.sendPasswordResetConfirmation(user);
       } catch (emailError) {
-        console.error('Failed to send password reset confirmation email:', emailError);
+        console.error(
+          "Failed to send password reset confirmation email:",
+          emailError
+        );
         // Don't fail the password reset if email fails
       }
 
       res.json({ message: "Password successfully reset" });
     } catch (error) {
-      console.error('Reset password error:', error);
+      console.error("Reset password error:", error);
       res.status(500).json({ message: "Failed to reset password" });
     }
   });
@@ -986,59 +1109,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Subscription Routes
 
   // Create subscription
-  app.post(`${apiPrefix}/subscriptions/create`, authenticate, async (req, res) => {
-    try {
-      // Check if Razorpay is initialized
-      if (!razorpay) {
-        // Initialize Razorpay with API keys
-        const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
-        const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+  app.post(
+    `${apiPrefix}/subscriptions/create`,
+    authenticate,
+    async (req, res) => {
+      try {
+        // Check if Razorpay is initialized
+        if (!razorpay) {
+          // Initialize Razorpay with API keys
+          const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+          const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
 
-        if (!razorpayKeyId || !razorpayKeySecret) {
-          return res.status(500).json({ message: "Razorpay API keys not configured" });
+          if (!razorpayKeyId || !razorpayKeySecret) {
+            return res
+              .status(500)
+              .json({ message: "Razorpay API keys not configured" });
+          }
+
+          razorpay = new Razorpay({
+            key_id: razorpayKeyId,
+            key_secret: razorpayKeySecret,
+          });
         }
 
-        razorpay = new Razorpay({
-          key_id: razorpayKeyId,
-          key_secret: razorpayKeySecret
+        const user = (req as any).user;
+        const { planId, planName, intervalInMonths = 1 } = req.body;
+
+        // Create Razorpay subscription
+        const subscription = await razorpay.subscriptions.create({
+          plan_id: planId,
+          customer_notify: 1,
+          total_count: 12, // 12 billing cycles
+          quantity: 1,
         });
+
+        // Calculate end date based on interval
+        const startDate = new Date();
+        const endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + intervalInMonths * 12); // 12 billing cycles
+
+        // Record subscription in our database
+        const createdSubscription = await storage.createSubscription({
+          userId: user.id,
+          razorpaySubscriptionId: subscription.id,
+          planName,
+          status: "active",
+          startDate,
+          endDate,
+        });
+
+        res.json({
+          message: "Subscription created successfully",
+          subscription: createdSubscription,
+          razorpaySubscription: subscription,
+        });
+      } catch (error) {
+        res.status(500).json({ message: "Failed to create subscription" });
       }
-
-      const user = (req as any).user;
-      const { planId, planName, intervalInMonths = 1 } = req.body;
-
-      // Create Razorpay subscription
-      const subscription = await razorpay.subscriptions.create({
-        plan_id: planId,
-        customer_notify: 1,
-        total_count: 12, // 12 billing cycles
-        quantity: 1
-      });
-
-      // Calculate end date based on interval
-      const startDate = new Date();
-      const endDate = new Date();
-      endDate.setMonth(endDate.getMonth() + intervalInMonths * 12); // 12 billing cycles
-
-      // Record subscription in our database
-      const createdSubscription = await storage.createSubscription({
-        userId: user.id,
-        razorpaySubscriptionId: subscription.id,
-        planName,
-        status: 'active',
-        startDate,
-        endDate
-      });
-
-      res.json({
-        message: "Subscription created successfully",
-        subscription: createdSubscription,
-        razorpaySubscription: subscription
-      });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to create subscription" });
     }
-  });
+  );
 
   // Get user subscriptions
   app.get(`${apiPrefix}/subscriptions`, authenticate, async (req, res) => {
@@ -1056,9 +1185,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(`${apiPrefix}/orders/history`, authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
-      console.log('Fetching orders for user ID:', user.id);
+      console.log("Fetching orders for user ID:", user.id);
       const orders = await storage.getOrdersByUserId(user.id);
-      console.log('Retrieved orders:', orders.length, 'for user', user.id);
+      console.log("Retrieved orders:", orders.length, "for user", user.id);
 
       // Fetch comprehensive order details for each order
       const ordersWithDetails = await Promise.all(
@@ -1070,13 +1199,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const product = await storage.getProductById(item.productId);
               return {
                 ...item,
-                product: product ? {
-                  id: product.id,
-                  name: product.name,
-                  sku: product.sku,
-                  imageUrl: product.imageUrl,
-                  category: product.category
-                } : null
+                product: product
+                  ? {
+                      id: product.id,
+                      name: product.name,
+                      sku: product.sku,
+                      imageUrl: product.imageUrl,
+                      category: product.category,
+                    }
+                  : null,
               };
             })
           );
@@ -1085,9 +1216,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let payment = null;
           try {
             const payments = await storage.getPaymentsByUserId(user.id);
-            payment = payments.find(p => p.orderId === order.id);
+            payment = payments.find((p) => p.orderId === order.id);
           } catch (error) {
-            console.log('Payment details not found for order:', order.id);
+            console.log("Payment details not found for order:", order.id);
           }
 
           // Get applied discounts
@@ -1101,34 +1232,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   code: discount.code,
                   type: discount.type,
                   value: discount.value,
-                  description: discount.description
+                  description: discount.description,
                 });
               }
             }
           } catch (error) {
-            console.log('Discount details not found for order:', order.id);
+            console.log("Discount details not found for order:", order.id);
           }
 
           return {
             ...order,
             items: itemsWithProducts,
-            payment: payment ? {
-              id: payment.id,
-              amount: payment.amount,
-              status: payment.status,
-              method: payment.razorpayPaymentId ? 'Razorpay' : 'Unknown',
-              razorpayPaymentId: payment.razorpayPaymentId
-            } : null,
+            payment: payment
+              ? {
+                  id: payment.id,
+                  amount: payment.amount,
+                  status: payment.status,
+                  method: payment.razorpayPaymentId ? "Razorpay" : "Unknown",
+                  razorpayPaymentId: payment.razorpayPaymentId,
+                }
+              : null,
             appliedDiscounts,
-            shippingAddress: order.shippingAddress || 'Default address',
-            billingAddress: order.billingAddress || order.shippingAddress || 'Default address'
+            shippingAddress: order.shippingAddress || "Default address",
+            billingAddress:
+              order.billingAddress ||
+              order.shippingAddress ||
+              "Default address",
           };
         })
       );
 
       res.json({ orders: ordersWithDetails });
     } catch (error) {
-      console.error('Order history fetch error:', error);
+      console.error("Order history fetch error:", error);
       res.status(500).json({ message: "Failed to fetch order history" });
     }
   });
@@ -1144,24 +1280,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: user.id,
           createdAt: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000), // 21 days ago
           total: 45.95,
-          status: 'cancelled',
-          cancellationReason: 'Changed my mind',
+          status: "cancelled",
+          cancellationReason: "Changed my mind",
           items: [
-            { productName: 'Handcrafted Cheese', quantity: 1, price: 45.95 }
-          ]
+            { productName: "Handcrafted Cheese", quantity: 1, price: 45.95 },
+          ],
         },
         {
           id: 1005,
           userId: user.id,
           createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000), // 45 days ago
-          total: 95.80,
-          status: 'cancelled',
-          cancellationReason: 'Found a better deal elsewhere',
+          total: 95.8,
+          status: "cancelled",
+          cancellationReason: "Found a better deal elsewhere",
           items: [
-            { productName: 'Organic Spice Mix', quantity: 2, price: 30.01 },
-            { productName: 'Fresh Valley Honey', quantity: 1, price: 35.78 }
-          ]
-        }
+            { productName: "Organic Spice Mix", quantity: 2, price: 30.01 },
+            { productName: "Fresh Valley Honey", quantity: 1, price: 35.78 },
+          ],
+        },
       ];
 
       res.json({ orders: cancelledOrders });
@@ -1177,7 +1313,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get delivered orders from database
       const deliveredOrders = await storage.getOrdersByUserId(user.id);
-      const filteredDeliveredOrders = deliveredOrders.filter(order => order.status === 'delivered');
+      const filteredDeliveredOrders = deliveredOrders.filter(
+        (order) => order.status === "delivered"
+      );
 
       // Fetch order items for each delivered order with rating status
       const ordersWithItems = await Promise.all(
@@ -1187,19 +1325,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Check if user has already rated each product in this order
           const itemsWithRatingStatus = await Promise.all(
             items.map(async (item) => {
-              const canRate = await storage.canUserReviewProduct(user.id, item.productId);
+              const canRate = await storage.canUserReviewProduct(
+                user.id,
+                item.productId
+              );
               const hasRated = !canRate; // If can't rate, means already rated
               return {
                 ...item,
                 canRate,
-                hasRated
+                hasRated,
               };
             })
           );
 
           return {
             ...order,
-            items: itemsWithRatingStatus
+            items: itemsWithRatingStatus,
           };
         })
       );
@@ -1211,80 +1352,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Submit product rating for delivered order
-  app.post(`${apiPrefix}/orders/:orderId/rate-product`, authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      const { orderId } = req.params;
-      const { productId, rating, reviewText } = req.body;
+  app.post(
+    `${apiPrefix}/orders/:orderId/rate-product`,
+    authenticate,
+    async (req, res) => {
+      try {
+        const user = (req as any).user;
+        const { orderId } = req.params;
+        const { productId, rating, reviewText } = req.body;
 
-      // Validate input
-      if (!productId || !rating || rating < 1 || rating > 5) {
-        return res.status(400).json({ message: "Invalid product ID or rating" });
+        // Validate input
+        if (!productId || !rating || rating < 1 || rating > 5) {
+          return res
+            .status(400)
+            .json({ message: "Invalid product ID or rating" });
+        }
+
+        // Check if order exists and belongs to user
+        const order = await storage.getOrderById(parseInt(orderId));
+        if (!order || order.userId !== user.id) {
+          return res.status(404).json({ message: "Order not found" });
+        }
+
+        // Check if order is delivered
+        if (order.status !== "delivered") {
+          return res
+            .status(400)
+            .json({ message: "Can only rate products from delivered orders" });
+        }
+
+        // Check if user can rate this product (hasn't rated it before)
+        const canRate = await storage.canUserReviewProduct(user.id, productId);
+        if (!canRate) {
+          return res
+            .status(400)
+            .json({ message: "You have already rated this product" });
+        }
+
+        // Create the review
+        const review = await storage.addProductReview({
+          productId,
+          userId: user.id,
+          orderId: parseInt(orderId),
+          customerName: user.name,
+          rating,
+          reviewText: reviewText || "",
+          verified: true, // Mark as verified since it's from a delivered order
+        });
+
+        res.json({ message: "Rating submitted successfully", review });
+      } catch (error) {
+        console.error("Rating submission error:", error);
+        res.status(500).json({ message: "Failed to submit rating" });
       }
-
-      // Check if order exists and belongs to user
-      const order = await storage.getOrderById(parseInt(orderId));
-      if (!order || order.userId !== user.id) {
-        return res.status(404).json({ message: "Order not found" });
-      }
-
-      // Check if order is delivered
-      if (order.status !== 'delivered') {
-        return res.status(400).json({ message: "Can only rate products from delivered orders" });
-      }
-
-      // Check if user can rate this product (hasn't rated it before)
-      const canRate = await storage.canUserReviewProduct(user.id, productId);
-      if (!canRate) {
-        return res.status(400).json({ message: "You have already rated this product" });
-      }
-
-      // Create the review
-      const review = await storage.addProductReview({
-        productId,
-        userId: user.id,
-        orderId: parseInt(orderId),
-        customerName: user.name,
-        rating,
-        reviewText: reviewText || '',
-        verified: true // Mark as verified since it's from a delivered order
-      });
-
-      res.json({ message: "Rating submitted successfully", review });
-    } catch (error) {
-      console.error('Rating submission error:', error);
-      res.status(500).json({ message: "Failed to submit rating" });
     }
-  });
+  );
 
   // Cancel subscription
-  app.post(`${apiPrefix}/subscriptions/:id/cancel`, authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      const subscriptionId = parseInt(req.params.id);
+  app.post(
+    `${apiPrefix}/subscriptions/:id/cancel`,
+    authenticate,
+    async (req, res) => {
+      try {
+        const user = (req as any).user;
+        const subscriptionId = parseInt(req.params.id);
 
-      // Verify ownership
-      const subscription = await storage.getSubscriptionById(subscriptionId);
-      if (!subscription || subscription.userId !== user.id) {
-        return res.status(403).json({ message: "Unauthorized access to subscription" });
+        // Verify ownership
+        const subscription = await storage.getSubscriptionById(subscriptionId);
+        if (!subscription || subscription.userId !== user.id) {
+          return res
+            .status(403)
+            .json({ message: "Unauthorized access to subscription" });
+        }
+
+        // Cancel in Razorpay
+        if (razorpay) {
+          await razorpay.subscriptions.cancel(
+            subscription.razorpaySubscriptionId
+          );
+        }
+
+        // Update status in our database
+        const updatedSubscription = await storage.updateSubscriptionStatus(
+          subscriptionId,
+          "canceled"
+        );
+
+        res.json({
+          message: "Subscription canceled successfully",
+          subscription: updatedSubscription,
+        });
+      } catch (error) {
+        res.status(500).json({ message: "Failed to cancel subscription" });
       }
-
-      // Cancel in Razorpay
-      if (razorpay) {
-        await razorpay.subscriptions.cancel(subscription.razorpaySubscriptionId);
-      }
-
-      // Update status in our database
-      const updatedSubscription = await storage.updateSubscriptionStatus(subscriptionId, 'canceled');
-
-      res.json({
-        message: "Subscription canceled successfully",
-        subscription: updatedSubscription
-      });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to cancel subscription" });
     }
-  });
+  );
 
   // Product Review System for Delivered Orders
   // Get product reviews
@@ -1299,17 +1461,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Check if user can review a product (has purchased and received it)
-  app.get(`${apiPrefix}/products/:id/can-review`, authenticate, async (req, res) => {
-    try {
-      const productId = parseInt(req.params.id);
-      const userId = (req as any).user.id;
+  app.get(
+    `${apiPrefix}/products/:id/can-review`,
+    authenticate,
+    async (req, res) => {
+      try {
+        const productId = parseInt(req.params.id);
+        const userId = (req as any).user.id;
 
-      const canReview = await storage.canUserReviewProduct(userId, productId);
-      res.json(canReview);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to check review eligibility" });
+        const canReview = await storage.canUserReviewProduct(userId, productId);
+        res.json(canReview);
+      } catch (error) {
+        res.status(500).json({ message: "Failed to check review eligibility" });
+      }
     }
-  });
+  );
 
   // Add product review
   app.post(`${apiPrefix}/products/:id/reviews`, async (req, res) => {
@@ -1320,7 +1486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate the review data
       const validatedData = insertProductReviewSchema.parse({
         ...reviewData,
-        productId
+        productId,
       });
 
       const newReview = await storage.addProductReview(validatedData);
@@ -1342,7 +1508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newContactMessage = await storage.addContactMessage(validatedData);
       res.status(201).json({
         message: "Contact message submitted successfully",
-        id: newContactMessage.id
+        id: newContactMessage.id,
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to submit contact message" });
@@ -1405,9 +1571,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const teamMemberData = req.body;
 
       // Validate the team member data
-      const validatedData = insertTeamMemberSchema.partial().parse(teamMemberData);
+      const validatedData = insertTeamMemberSchema
+        .partial()
+        .parse(teamMemberData);
 
-      const updatedTeamMember = await storage.updateTeamMember(id, validatedData);
+      const updatedTeamMember = await storage.updateTeamMember(
+        id,
+        validatedData
+      );
       res.json(updatedTeamMember);
     } catch (error) {
       res.status(500).json({ message: "Failed to update team member" });
@@ -1432,17 +1603,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const productId = parseInt(req.params.id);
       const { stockQuantity } = req.body;
 
-      if (typeof stockQuantity !== 'number' || stockQuantity < 0) {
+      if (typeof stockQuantity !== "number" || stockQuantity < 0) {
         return res.status(400).json({ message: "Invalid stock quantity" });
       }
 
-      const updatedProduct = await storage.updateProductStock(productId, stockQuantity);
+      const updatedProduct = await storage.updateProductStock(
+        productId,
+        stockQuantity
+      );
       res.json({
         message: "Stock updated successfully",
-        product: updatedProduct
+        product: updatedProduct,
       });
     } catch (error) {
-      console.error('Stock update error:', error);
+      console.error("Stock update error:", error);
       res.status(500).json({ message: "Failed to update stock" });
     }
   });
@@ -1453,19 +1627,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { productId, quantity } = req.body;
 
       if (!productId || !quantity || quantity <= 0) {
-        return res.status(400).json({ message: "Invalid product ID or quantity" });
+        return res
+          .status(400)
+          .json({ message: "Invalid product ID or quantity" });
       }
 
-      const isAvailable = await storage.validateStockAvailability(productId, quantity);
+      const isAvailable = await storage.validateStockAvailability(
+        productId,
+        quantity
+      );
       const product = await storage.getProductById(productId);
 
       res.json({
         available: isAvailable,
         currentStock: product?.stockQuantity || 0,
-        requestedQuantity: quantity
+        requestedQuantity: quantity,
       });
     } catch (error) {
-      console.error('Stock validation error:', error);
+      console.error("Stock validation error:", error);
       res.status(500).json({ message: "Failed to validate stock" });
     }
   });
@@ -1475,15 +1654,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const threshold = parseInt(req.query.threshold as string) || 10;
       const allProducts = await storage.getAllProducts();
-      const lowStockProducts = allProducts.filter(product => product.stockQuantity <= threshold);
+      const lowStockProducts = allProducts.filter(
+        (product) => product.stockQuantity <= threshold
+      );
 
       res.json({
         lowStockProducts,
         threshold,
-        count: lowStockProducts.length
+        count: lowStockProducts.length,
       });
     } catch (error) {
-      console.error('Low stock check error:', error);
+      console.error("Low stock check error:", error);
       res.status(500).json({ message: "Failed to check low stock products" });
     }
   });
@@ -1516,58 +1697,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let payment = null;
       try {
         const payments = await storage.getPaymentsByUserId(order.userId || 0);
-        payment = payments.find(p => p.orderId === orderId);
+        payment = payments.find((p) => p.orderId === orderId);
       } catch (error) {
-        console.log('Payment details not found for order:', orderId);
+        console.log("Payment details not found for order:", orderId);
       }
 
       // Build comprehensive order details response
       const orderDetails = {
         ...order,
-        user: user ? {
-          id: user.id,
-          name: user.name,
-          email: user.email
-        } : null,
-        payment: payment ? {
-          id: payment.id,
-          amount: payment.amount,
-          status: payment.status,
-          razorpayPaymentId: payment.razorpayPaymentId
-        } : null,
-        items: await Promise.all(orderItems.map(async (item) => {
-          const product = await storage.getProductById(item.productId);
-          return {
-            ...item,
-            product: product ? {
-              id: product.id,
-              name: product.name,
-              sku: product.sku,
-              imageUrl: product.imageUrl
-            } : null
-          };
-        }))
+        user: user
+          ? {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+            }
+          : null,
+        payment: payment
+          ? {
+              id: payment.id,
+              amount: payment.amount,
+              status: payment.status,
+              razorpayPaymentId: payment.razorpayPaymentId,
+            }
+          : null,
+        items: await Promise.all(
+          orderItems.map(async (item) => {
+            const product = await storage.getProductById(item.productId);
+            return {
+              ...item,
+              product: product
+                ? {
+                    id: product.id,
+                    name: product.name,
+                    sku: product.sku,
+                    imageUrl: product.imageUrl,
+                  }
+                : null,
+            };
+          })
+        ),
       };
 
       res.json(orderDetails);
     } catch (error) {
-      console.error('Order details fetch error:', error);
+      console.error("Order details fetch error:", error);
       res.status(500).json({ message: "Failed to fetch order details" });
     }
   });
 
   // Discount API Routes
-  app.get('/api/admin/discounts', async (req, res) => {
+  app.get("/api/admin/discounts", async (req, res) => {
     try {
       const discounts = await storage.getAllDiscounts();
       res.json(discounts);
     } catch (error) {
-      console.error('Discounts fetch error:', error);
+      console.error("Discounts fetch error:", error);
       res.status(500).json({ message: "Failed to fetch discounts" });
     }
   });
 
-  app.post('/api/admin/discounts', async (req, res) => {
+  app.post("/api/admin/discounts", async (req, res) => {
     try {
       // Convert date strings to Date objects
       const requestData = {
@@ -1578,19 +1767,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validationResult = insertDiscountSchema.safeParse(requestData);
       if (!validationResult.success) {
-        console.error('Discount validation error:', validationResult.error.issues);
-        return res.status(400).json({ message: "Invalid discount data", errors: validationResult.error.issues });
+        console.error(
+          "Discount validation error:",
+          validationResult.error.issues
+        );
+        return res.status(400).json({
+          message: "Invalid discount data",
+          errors: validationResult.error.issues,
+        });
       }
 
       const discount = await storage.createDiscount(validationResult.data);
       res.json(discount);
     } catch (error) {
-      console.error('Discount creation error:', error);
+      console.error("Discount creation error:", error);
       res.status(500).json({ message: "Failed to create discount" });
     }
   });
 
-  app.put('/api/admin/discounts/:id', async (req, res) => {
+  app.put("/api/admin/discounts/:id", async (req, res) => {
     try {
       const { id } = req.params;
 
@@ -1601,91 +1796,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...(req.body.endDate && { endDate: new Date(req.body.endDate) }),
       };
 
-      const validationResult = insertDiscountSchema.partial().safeParse(requestData);
+      const validationResult = insertDiscountSchema
+        .partial()
+        .safeParse(requestData);
       if (!validationResult.success) {
-        console.error('Discount update validation error:', validationResult.error.issues);
-        return res.status(400).json({ message: "Invalid discount data", errors: validationResult.error.issues });
+        console.error(
+          "Discount update validation error:",
+          validationResult.error.issues
+        );
+        return res.status(400).json({
+          message: "Invalid discount data",
+          errors: validationResult.error.issues,
+        });
       }
 
-      const discount = await storage.updateDiscount(parseInt(id), validationResult.data);
+      const discount = await storage.updateDiscount(
+        parseInt(id),
+        validationResult.data
+      );
       res.json(discount);
     } catch (error) {
-      console.error('Discount update error:', error);
+      console.error("Discount update error:", error);
       res.status(500).json({ message: "Failed to update discount" });
     }
   });
 
-  app.delete('/api/admin/discounts/:id', async (req, res) => {
+  app.delete("/api/admin/discounts/:id", async (req, res) => {
     try {
       const { id } = req.params;
       await storage.deleteDiscount(parseInt(id));
       res.json({ message: "Discount deleted successfully" });
     } catch (error) {
-      console.error('Discount deletion error:', error);
+      console.error("Discount deletion error:", error);
       res.status(500).json({ message: "Failed to delete discount" });
     }
   });
 
-
-
-
-
-
   // Site Settings Routes for Store Information & Social Media
-  app.get('/api/site-settings', async (req, res) => {
+  app.get("/api/site-settings", async (req, res) => {
     try {
       const settings = await storage.getAllSiteSettings();
       res.json(settings);
     } catch (error) {
-      console.error('Site settings fetch error:', error);
+      console.error("Site settings fetch error:", error);
       res.status(500).json({ message: "Failed to fetch site settings" });
     }
   });
 
-  app.get('/api/admin/site-settings', async (req, res) => {
+  app.get("/api/admin/site-settings", async (req, res) => {
     try {
       const settings = await storage.getAllSiteSettings();
       res.json(settings);
     } catch (error) {
-      console.error('Admin site settings fetch error:', error);
+      console.error("Admin site settings fetch error:", error);
       res.status(500).json({ message: "Failed to fetch site settings" });
     }
   });
 
-  app.post('/api/admin/site-settings', async (req, res) => {
+  app.post("/api/admin/site-settings", async (req, res) => {
     try {
       const setting = await storage.upsertSiteSetting(req.body);
       res.json(setting);
     } catch (error) {
-      console.error('Site setting update error:', error);
+      console.error("Site setting update error:", error);
       res.status(500).json({ message: "Failed to update site setting" });
     }
   });
 
-  app.delete('/api/admin/site-settings/:key', async (req, res) => {
+  app.delete("/api/admin/site-settings/:key", async (req, res) => {
     try {
       const { key } = req.params;
       await storage.deleteSiteSetting(key);
       res.json({ message: "Setting deleted successfully" });
     } catch (error) {
-      console.error('Site setting deletion error:', error);
+      console.error("Site setting deletion error:", error);
       res.status(500).json({ message: "Failed to delete site setting" });
     }
   });
 
   // Get active discounts for checkout
-  app.get('/api/discounts/active', async (req, res) => {
+  app.get("/api/discounts/active", async (req, res) => {
     try {
       const discounts = await storage.getActiveDiscounts();
       res.json(discounts);
     } catch (error) {
-      console.error('Active discounts fetch error:', error);
+      console.error("Active discounts fetch error:", error);
       res.status(500).json({ message: "Failed to fetch active discounts" });
     }
   });
 
   // Discount validation and application for checkout
-  app.post('/api/discounts/validate', async (req, res) => {
+  app.post("/api/discounts/validate", async (req, res) => {
     try {
       const { code, id, cartTotal, userId } = req.body;
       let validation;
@@ -1700,39 +1901,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(validation);
     } catch (error) {
-      console.error('Discount validation error:', error);
+      console.error("Discount validation error:", error);
       res.status(500).json({ message: "Failed to validate discount" });
     }
   });
 
-  app.post('/api/discounts/apply', async (req, res) => {
+  app.post("/api/discounts/apply", async (req, res) => {
     try {
       const { discountId, userId, sessionId, orderId } = req.body;
-      const usage = await storage.applyDiscount(discountId, userId, sessionId, orderId);
+      const usage = await storage.applyDiscount(
+        discountId,
+        userId,
+        sessionId,
+        orderId
+      );
       res.json(usage);
     } catch (error) {
-      console.error('Discount application error:', error);
+      console.error("Discount application error:", error);
       res.status(500).json({ message: "Failed to apply discount" });
     }
   });
 
   // Public route to get active discounts for customer view
-  app.get('/api/discounts/active', async (req, res) => {
+  app.get("/api/discounts/active", async (req, res) => {
     try {
       const activeDiscounts = await storage.getActiveDiscounts();
       // Only return essential info for public view
-      const publicDiscounts = activeDiscounts.map(discount => ({
+      const publicDiscounts = activeDiscounts.map((discount) => ({
         id: discount.id,
         code: discount.code,
         type: discount.type,
         value: discount.value,
         description: discount.description,
         minPurchase: discount.minPurchase,
-        endDate: discount.endDate
+        endDate: discount.endDate,
       }));
       res.json(publicDiscounts);
     } catch (error) {
-      console.error('Active discounts fetch error:', error);
+      console.error("Active discounts fetch error:", error);
       res.status(500).json({ message: "Failed to fetch active discounts" });
     }
   });
@@ -1743,42 +1949,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const generateSlug = (name: string): string => {
     return name
       .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+      .replace(/[^a-z0-9\s-]/g, "") // Remove special characters
       .trim()
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .replace(/-+/g, '-'); // Replace multiple hyphens with single hyphen
+      .replace(/\s+/g, "-") // Replace spaces with hyphens
+      .replace(/-+/g, "-"); // Replace multiple hyphens with single hyphen
   };
 
   // Get all categories (main categories only)
-  app.get('/api/admin/categories', authenticate, async (req, res) => {
+  app.get("/api/admin/categories", authenticate, async (req, res) => {
     try {
       const categories = await storage.getMainCategories();
       res.json(categories);
     } catch (error) {
-      console.error('Get categories error:', error);
-      res.status(500).json({ message: 'Failed to fetch categories' });
+      console.error("Get categories error:", error);
+      res.status(500).json({ message: "Failed to fetch categories" });
     }
   });
 
   // Get all categories with subcategories
-  app.get('/api/admin/categories/all', authenticate, async (req, res) => {
+  app.get("/api/admin/categories/all", authenticate, async (req, res) => {
     try {
       const categories = await storage.getAllCategories();
       res.json(categories);
     } catch (error) {
-      console.error('Get all categories error:', error);
-      res.status(500).json({ message: 'Failed to fetch categories' });
+      console.error("Get all categories error:", error);
+      res.status(500).json({ message: "Failed to fetch categories" });
     }
   });
 
   // Create a new category
-  app.post('/api/admin/categories', authenticate, async (req, res) => {
+  app.post("/api/admin/categories", authenticate, async (req, res) => {
     try {
       const categoryData = req.body;
 
       // Validate required fields
       if (!categoryData.name) {
-        return res.status(400).json({ message: 'Category name is required' });
+        return res.status(400).json({ message: "Category name is required" });
       }
 
       // Generate slug if not provided
@@ -1789,19 +1995,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newCategory = await storage.createCategory(categoryData);
       res.status(201).json(newCategory);
     } catch (error) {
-      console.error('Create category error:', error);
-      res.status(500).json({ message: 'Failed to create category' });
+      console.error("Create category error:", error);
+      res.status(500).json({ message: "Failed to create category" });
     }
   });
 
   // Update a category
-  app.put('/api/admin/categories/:id', authenticate, async (req, res) => {
+  app.put("/api/admin/categories/:id", authenticate, async (req, res) => {
     try {
       const categoryId = parseInt(req.params.id);
       const updateData = req.body;
 
       if (isNaN(categoryId)) {
-        return res.status(400).json({ message: 'Invalid category ID' });
+        return res.status(400).json({ message: "Invalid category ID" });
       }
 
       // Generate slug if name is being updated and slug is not provided
@@ -1809,21 +2015,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updateData.slug = generateSlug(updateData.name);
       }
 
-      const updatedCategory = await storage.updateCategory(categoryId, updateData);
+      const updatedCategory = await storage.updateCategory(
+        categoryId,
+        updateData
+      );
       res.json(updatedCategory);
     } catch (error) {
-      console.error('Update category error:', error);
-      res.status(500).json({ message: 'Failed to update category' });
+      console.error("Update category error:", error);
+      res.status(500).json({ message: "Failed to update category" });
     }
   });
 
   // Delete a category
-  app.delete('/api/admin/categories/:id', authenticate, async (req, res) => {
+  app.delete("/api/admin/categories/:id", authenticate, async (req, res) => {
     try {
       const categoryId = parseInt(req.params.id);
 
       if (isNaN(categoryId)) {
-        return res.status(400).json({ message: 'Invalid category ID' });
+        return res.status(400).json({ message: "Invalid category ID" });
       }
 
       // Check if category has products
@@ -1831,90 +2040,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const category = await storage.getCategoryById(categoryId);
 
       if (!category) {
-        return res.status(404).json({ message: 'Category not found' });
+        return res.status(404).json({ message: "Category not found" });
       }
 
-      const productsUsingCategory = allProducts.filter(product =>
-        product.category === category.name
+      const productsUsingCategory = allProducts.filter(
+        (product) => product.category === category.name
       );
 
       if (productsUsingCategory.length > 0) {
         return res.status(400).json({
           message: `Cannot delete category. ${productsUsingCategory.length} products are using this category.`,
-          productsCount: productsUsingCategory.length
+          productsCount: productsUsingCategory.length,
         });
       }
 
       await storage.deleteCategory(categoryId);
-      res.json({ message: 'Category deleted successfully' });
+      res.json({ message: "Category deleted successfully" });
     } catch (error) {
-      console.error('Delete category error:', error);
-      res.status(500).json({ message: 'Failed to delete category' });
+      console.error("Delete category error:", error);
+      res.status(500).json({ message: "Failed to delete category" });
     }
   });
 
   // Get subcategories for a specific category
-  app.get('/api/admin/categories/:id/subcategories', authenticate, async (req, res) => {
-    try {
-      const categoryId = parseInt(req.params.id);
+  app.get(
+    "/api/admin/categories/:id/subcategories",
+    authenticate,
+    async (req, res) => {
+      try {
+        const categoryId = parseInt(req.params.id);
 
-      if (isNaN(categoryId)) {
-        return res.status(400).json({ message: 'Invalid category ID' });
+        if (isNaN(categoryId)) {
+          return res.status(400).json({ message: "Invalid category ID" });
+        }
+
+        const subcategories = await storage.getSubcategoriesByParent(
+          categoryId
+        );
+        res.json(subcategories);
+      } catch (error) {
+        console.error("Get subcategories error:", error);
+        res.status(500).json({ message: "Failed to fetch subcategories" });
       }
-
-      const subcategories = await storage.getSubcategoriesByParent(categoryId);
-      res.json(subcategories);
-    } catch (error) {
-      console.error('Get subcategories error:', error);
-      res.status(500).json({ message: 'Failed to fetch subcategories' });
     }
-  });
+  );
 
   // Create a new subcategory
-  app.post('/api/admin/categories/:id/subcategories', authenticate, async (req, res) => {
-    try {
-      const parentId = parseInt(req.params.id);
-      const subcategoryData = req.body;
+  app.post(
+    "/api/admin/categories/:id/subcategories",
+    authenticate,
+    async (req, res) => {
+      try {
+        const parentId = parseInt(req.params.id);
+        const subcategoryData = req.body;
 
-      if (isNaN(parentId)) {
-        return res.status(400).json({ message: 'Invalid parent category ID' });
+        if (isNaN(parentId)) {
+          return res
+            .status(400)
+            .json({ message: "Invalid parent category ID" });
+        }
+
+        if (!subcategoryData.name) {
+          return res
+            .status(400)
+            .json({ message: "Subcategory name is required" });
+        }
+
+        // Verify parent category exists
+        const parentCategory = await storage.getCategoryById(parentId);
+        if (!parentCategory) {
+          return res.status(404).json({ message: "Parent category not found" });
+        }
+
+        // Generate slug if not provided
+        if (!subcategoryData.slug) {
+          subcategoryData.slug = generateSlug(subcategoryData.name);
+        }
+
+        const newSubcategory = await storage.createCategory({
+          ...subcategoryData,
+          parentId: parentId,
+        });
+
+        res.status(201).json(newSubcategory);
+      } catch (error) {
+        console.error("Create subcategory error:", error);
+        res.status(500).json({ message: "Failed to create subcategory" });
       }
-
-      if (!subcategoryData.name) {
-        return res.status(400).json({ message: 'Subcategory name is required' });
-      }
-
-      // Verify parent category exists
-      const parentCategory = await storage.getCategoryById(parentId);
-      if (!parentCategory) {
-        return res.status(404).json({ message: 'Parent category not found' });
-      }
-
-      // Generate slug if not provided
-      if (!subcategoryData.slug) {
-        subcategoryData.slug = generateSlug(subcategoryData.name);
-      }
-
-      const newSubcategory = await storage.createCategory({
-        ...subcategoryData,
-        parentId: parentId
-      });
-
-      res.status(201).json(newSubcategory);
-    } catch (error) {
-      console.error('Create subcategory error:', error);
-      res.status(500).json({ message: 'Failed to create subcategory' });
     }
-  });
+  );
 
   // Update a subcategory
-  app.put('/api/admin/subcategories/:id', authenticate, async (req, res) => {
+  app.put("/api/admin/subcategories/:id", authenticate, async (req, res) => {
     try {
       const subcategoryId = parseInt(req.params.id);
       const updateData = req.body;
 
       if (isNaN(subcategoryId)) {
-        return res.status(400).json({ message: 'Invalid subcategory ID' });
+        return res.status(400).json({ message: "Invalid subcategory ID" });
       }
 
       // Generate slug if name is being updated and slug is not provided
@@ -1922,21 +2145,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updateData.slug = generateSlug(updateData.name);
       }
 
-      const updatedSubcategory = await storage.updateCategory(subcategoryId, updateData);
+      const updatedSubcategory = await storage.updateCategory(
+        subcategoryId,
+        updateData
+      );
       res.json(updatedSubcategory);
     } catch (error) {
-      console.error('Update subcategory error:', error);
-      res.status(500).json({ message: 'Failed to update subcategory' });
+      console.error("Update subcategory error:", error);
+      res.status(500).json({ message: "Failed to update subcategory" });
     }
   });
 
   // Delete a subcategory
-  app.delete('/api/admin/subcategories/:id', authenticate, async (req, res) => {
+  app.delete("/api/admin/subcategories/:id", authenticate, async (req, res) => {
     try {
       const subcategoryId = parseInt(req.params.id);
 
       if (isNaN(subcategoryId)) {
-        return res.status(400).json({ message: 'Invalid subcategory ID' });
+        return res.status(400).json({ message: "Invalid subcategory ID" });
       }
 
       // Check if subcategory has products
@@ -1944,93 +2170,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const subcategory = await storage.getCategoryById(subcategoryId);
 
       if (!subcategory) {
-        return res.status(404).json({ message: 'Subcategory not found' });
+        return res.status(404).json({ message: "Subcategory not found" });
       }
 
-      const productsUsingSubcategory = allProducts.filter(product =>
-        product.subcategory === subcategory.name
+      const productsUsingSubcategory = allProducts.filter(
+        (product) => product.subcategory === subcategory.name
       );
 
       if (productsUsingSubcategory.length > 0) {
         return res.status(400).json({
           message: `Cannot delete subcategory. ${productsUsingSubcategory.length} products are using this subcategory.`,
-          productsCount: productsUsingSubcategory.length
+          productsCount: productsUsingSubcategory.length,
         });
       }
 
       await storage.deleteCategory(subcategoryId);
-      res.json({ message: 'Subcategory deleted successfully' });
+      res.json({ message: "Subcategory deleted successfully" });
     } catch (error) {
-      console.error('Delete subcategory error:', error);
-      res.status(500).json({ message: 'Failed to delete subcategory' });
+      console.error("Delete subcategory error:", error);
+      res.status(500).json({ message: "Failed to delete subcategory" });
     }
   });
 
   // Database Export API Routes
-  app.get('/api/admin/database/export', async (req, res) => {
+  app.get("/api/admin/database/export", async (req, res) => {
     try {
-      console.log('Starting database export...');
+      console.log("Starting database export...");
       const exportPath = await exportDatabase();
 
       res.json({
         message: "Database exported successfully",
         filePath: exportPath,
-        downloadUrl: `/api/admin/database/download/${path.basename(exportPath)}`
+        downloadUrl: `/api/admin/database/download/${path.basename(
+          exportPath
+        )}`,
       });
     } catch (error) {
-      console.error('Database export error:', error);
+      console.error("Database export error:", error);
       res.status(500).json({ message: "Failed to export database" });
     }
   });
 
   // Download exported database file
-  app.get('/api/admin/database/download/:filename', (req, res) => {
+  app.get("/api/admin/database/download/:filename", (req, res) => {
     try {
       const filename = req.params.filename;
-      const filePath = path.join(process.cwd(), 'exports', filename);
+      const filePath = path.join(process.cwd(), "exports", filename);
 
       // Security check - ensure file is in exports directory
-      if (!filePath.startsWith(path.join(process.cwd(), 'exports'))) {
+      if (!filePath.startsWith(path.join(process.cwd(), "exports"))) {
         return res.status(403).json({ message: "Access denied" });
       }
 
       // Check if file exists
-      if (!require('fs').existsSync(filePath)) {
+      if (!require("fs").existsSync(filePath)) {
         return res.status(404).json({ message: "Export file not found" });
       }
 
       res.download(filePath, filename, (err) => {
         if (err) {
-          console.error('File download error:', err);
+          console.error("File download error:", err);
           res.status(500).json({ message: "Failed to download file" });
         }
       });
     } catch (error) {
-      console.error('Download error:', error);
+      console.error("Download error:", error);
       res.status(500).json({ message: "Failed to download export file" });
     }
   });
-
-
 
   // Initialize Razorpay and Email service when environment variables are available
   if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
     razorpay = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
     });
     console.log("Razorpay payment gateway initialized");
   }
 
-  if (process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  if (
+    process.env.EMAIL_HOST &&
+    process.env.EMAIL_USER &&
+    process.env.EMAIL_PASS
+  ) {
     transporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST,
-      port: parseInt(process.env.EMAIL_PORT || '587'),
-      secure: process.env.EMAIL_SECURE === 'true',
+      port: parseInt(process.env.EMAIL_PORT || "587"),
+      secure: process.env.EMAIL_SECURE === "true",
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
+        pass: process.env.EMAIL_PASS,
+      },
     });
     console.log("Email service initialized");
   }

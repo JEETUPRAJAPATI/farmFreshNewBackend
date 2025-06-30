@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import { db } from '../db';
+import { Request, Response } from "express";
+import { db } from "../db";
 import {
   orders,
   orderItems,
@@ -7,51 +7,51 @@ import {
   users,
   farmers,
   Order,
-  OrderItem
-} from '../shared/schema';
-import { eq, like, desc, asc, and, gte, lte, sql } from 'drizzle-orm';
+  OrderItem,
+} from "../shared/schema";
+import { eq, like, desc, asc, and, gte, lte, sql } from "drizzle-orm";
 
 // GET all orders with pagination, sorting and filtering
 export const getAllOrders = async (req: Request, res: Response) => {
   try {
     const {
-      page = '1',
-      limit = '10',
-      sort = 'id',
-      order = 'asc',
-      search = '',
-      status = '',
-      startDate = '',
-      endDate = ''
+      page = "1",
+      limit = "10",
+      sort = "id",
+      order = "asc",
+      search = "",
+      status = "",
+      startDate = "",
+      endDate = "",
     } = req.query as Record<string, string>;
 
     const pageNumber = parseInt(page);
     const limitNumber = parseInt(limit);
     const offset = (pageNumber - 1) * limitNumber;
 
-    let query = db.select({
-      id: orders.id,
-      userId: orders.userId,
-      sessionId: orders.sessionId,
-      total: orders.total,
-      status: orders.status,
-      shippingAddress: orders.shippingAddress,
-      paymentMethod: orders.paymentMethod,
-      cancellationReason: orders.cancellationReason,
-      deliveredAt: orders.deliveredAt,
-      createdAt: orders.createdAt,
-      updatedAt: orders.updatedAt,
-      userName: users.name,
-      userEmail: users.email
-    })
+    let query = db
+      .select({
+        id: orders.id,
+        userId: orders.userId,
+        sessionId: orders.sessionId,
+        total: orders.total,
+        status: orders.status,
+        shippingAddress: orders.shippingAddress,
+        paymentMethod: orders.paymentMethod,
+        cancellationReason: orders.cancellationReason,
+        deliveredAt: orders.deliveredAt,
+        createdAt: orders.createdAt,
+        updatedAt: orders.updatedAt,
+        trackingId: orders.trackingId,
+        userName: users.name,
+        userEmail: users.email,
+      })
       .from(orders)
       .leftJoin(users, eq(orders.userId, users.id));
 
     // Apply search filter if provided
     if (search) {
-      query = query.where(
-        like(users.name, `%${search}%`)
-      );
+      query = query.where(like(users.name, `%${search}%`));
     }
 
     // Apply status filter if provided
@@ -78,7 +78,8 @@ export const getAllOrders = async (req: Request, res: Response) => {
 
     // Apply the same filters to the count query
     if (search) {
-      totalQuery.leftJoin(users, eq(orders.userId, users.id))
+      totalQuery
+        .leftJoin(users, eq(orders.userId, users.id))
         .where(like(users.name, `%${search}%`));
     }
     if (status) {
@@ -101,14 +102,14 @@ export const getAllOrders = async (req: Request, res: Response) => {
     const count = countResult?.count || 0;
 
     // Apply sorting
-    if (sort === 'userName') {
-      if (order === 'asc') {
+    if (sort === "userName") {
+      if (order === "asc") {
         query = query.orderBy(asc(users.name));
       } else {
         query = query.orderBy(desc(users.name));
       }
     } else {
-      if (order === 'asc') {
+      if (order === "asc") {
         query = query.orderBy(asc(orders[sort as keyof typeof orders]));
       } else {
         query = query.orderBy(desc(orders[sort as keyof typeof orders]));
@@ -128,12 +129,14 @@ export const getAllOrders = async (req: Request, res: Response) => {
         total: Number(count),
         page: pageNumber,
         limit: limitNumber,
-        totalPages: Math.ceil(Number(count) / limitNumber)
-      }
+        totalPages: Math.ceil(Number(count) / limitNumber),
+      },
     });
   } catch (error) {
-    console.error('Error fetching orders:', error);
-    res.status(500).json({ message: 'Failed to fetch orders', error: String(error) });
+    console.error("Error fetching orders:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch orders", error: String(error) });
   }
 };
 
@@ -143,39 +146,42 @@ export const getOrderById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     // Get order details
-    const [orderData] = await db.select({
-      id: orders.id,
-      userId: orders.userId,
-      sessionId: orders.sessionId,
-      total: orders.total,
-      status: orders.status,
-      shippingAddress: orders.shippingAddress,
-      paymentMethod: orders.paymentMethod,
-      cancellationReason: orders.cancellationReason,
-      deliveredAt: orders.deliveredAt,
-      createdAt: orders.createdAt,
-      updatedAt: orders.updatedAt,
-      userName: users.name,
-      userEmail: users.email
-    })
+    const [orderData] = await db
+      .select({
+        id: orders.id,
+        userId: orders.userId,
+        sessionId: orders.sessionId,
+        total: orders.total,
+        status: orders.status,
+        shippingAddress: orders.shippingAddress,
+        paymentMethod: orders.paymentMethod,
+        cancellationReason: orders.cancellationReason,
+        deliveredAt: orders.deliveredAt,
+        trackingId: orders.trackingId,
+        createdAt: orders.createdAt,
+        updatedAt: orders.updatedAt,
+        userName: users.name,
+        userEmail: users.email,
+      })
       .from(orders)
       .leftJoin(users, eq(orders.userId, users.id))
       .where(eq(orders.id, parseInt(id)));
 
     if (!orderData) {
-      return res.status(404).json({ message: 'Order not found' });
+      return res.status(404).json({ message: "Order not found" });
     }
 
     // Get order items with product details
-    const orderItemsWithProducts = await db.select({
-      id: orderItems.id,
-      orderId: orderItems.orderId,
-      productId: orderItems.productId,
-      quantity: orderItems.quantity,
-      price: orderItems.price,
-      productName: products.name,
-      productImageUrl: products.imageUrl
-    })
+    const orderItemsWithProducts = await db
+      .select({
+        id: orderItems.id,
+        orderId: orderItems.orderId,
+        productId: orderItems.productId,
+        quantity: orderItems.quantity,
+        price: orderItems.price,
+        productName: products.name,
+        productImageUrl: products.imageUrl,
+      })
       .from(orderItems)
       .leftJoin(products, eq(orderItems.productId, products.id))
       .where(eq(orderItems.orderId, parseInt(id)));
@@ -183,11 +189,13 @@ export const getOrderById = async (req: Request, res: Response) => {
     // Return order with its items
     res.json({
       ...orderData,
-      items: orderItemsWithProducts
+      items: orderItemsWithProducts,
     });
   } catch (error) {
-    console.error('Error fetching order:', error);
-    res.status(500).json({ message: 'Failed to fetch order', error: String(error) });
+    console.error("Error fetching order:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch order", error: String(error) });
   }
 };
 
@@ -198,20 +206,26 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     const { status, cancellationReason } = req.body;
 
     // Validate status
-    const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+    const validStatuses = [
+      "pending",
+      "processing",
+      "shipped",
+      "delivered",
+      "cancelled",
+    ];
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: 'Invalid order status' });
+      return res.status(400).json({ message: "Invalid order status" });
     }
 
     // Prepare update data
     const updateData: Partial<Order> = { status };
 
     // Add additional fields based on status
-    if (status === 'cancelled' && cancellationReason) {
+    if (status === "cancelled" && cancellationReason) {
       updateData.cancellationReason = cancellationReason;
     }
 
-    if (status === 'delivered') {
+    if (status === "delivered") {
       updateData.deliveredAt = new Date();
     }
 
@@ -223,16 +237,18 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       .returning();
 
     if (!updatedOrder) {
-      return res.status(404).json({ message: 'Order not found' });
+      return res.status(404).json({ message: "Order not found" });
     }
 
     res.json({
-      message: 'Order status updated successfully',
-      order: updatedOrder
+      message: "Order status updated successfully",
+      order: updatedOrder,
     });
   } catch (error) {
-    console.error('Error updating order status:', error);
-    res.status(500).json({ message: 'Failed to update order status', error: String(error) });
+    console.error("Error updating order status:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to update order status", error: String(error) });
   }
 };
 
@@ -256,16 +272,18 @@ export const deleteOrder = async (req: Request, res: Response) => {
     });
 
     if (!deletedOrder) {
-      return res.status(404).json({ message: 'Order not found' });
+      return res.status(404).json({ message: "Order not found" });
     }
 
     res.json({
-      message: 'Order deleted successfully',
-      order: deletedOrder
+      message: "Order deleted successfully",
+      order: deletedOrder,
     });
   } catch (error) {
-    console.error('Error deleting order:', error);
-    res.status(500).json({ message: 'Failed to delete order', error: String(error) });
+    console.error("Error deleting order:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to delete order", error: String(error) });
   }
 };
 
@@ -277,22 +295,34 @@ export const getOrderStatisticsData = async (): Promise<any> => {
 
     // Calculate statistics
     const totalOrders = allOrders.length;
-    const pendingOrders = allOrders.filter(o => o.status === 'pending').length;
-    const processingOrders = allOrders.filter(o => o.status === 'processing').length;
-    const shippedOrders = allOrders.filter(o => o.status === 'shipped').length;
-    const deliveredOrders = allOrders.filter(o => o.status === 'delivered').length;
-    const cancelledOrders = allOrders.filter(o => o.status === 'cancelled').length;
+    const pendingOrders = allOrders.filter(
+      (o) => o.status === "pending"
+    ).length;
+    const processingOrders = allOrders.filter(
+      (o) => o.status === "processing"
+    ).length;
+    const shippedOrders = allOrders.filter(
+      (o) => o.status === "shipped"
+    ).length;
+    const deliveredOrders = allOrders.filter(
+      (o) => o.status === "delivered"
+    ).length;
+    const cancelledOrders = allOrders.filter(
+      (o) => o.status === "cancelled"
+    ).length;
 
     // Calculate total revenue
     const totalRevenue = allOrders
-      .filter(o => o.status !== 'cancelled')
+      .filter((o) => o.status !== "cancelled")
       .reduce((sum, order) => sum + Number(order.total), 0);
 
     // Get recent orders (last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const recentOrders = allOrders.filter(o => new Date(o.createdAt) >= thirtyDaysAgo).length;
+    const recentOrders = allOrders.filter(
+      (o) => new Date(o.createdAt) >= thirtyDaysAgo
+    ).length;
 
     return {
       totalOrders,
@@ -302,10 +332,10 @@ export const getOrderStatisticsData = async (): Promise<any> => {
       deliveredOrders,
       cancelledOrders,
       totalRevenue,
-      recentOrders
+      recentOrders,
     };
   } catch (error) {
-    console.error('Error fetching order statistics:', error);
+    console.error("Error fetching order statistics:", error);
     throw error;
   }
 };
@@ -316,8 +346,13 @@ export const getOrderStatistics = async (req: Request, res: Response) => {
     const statistics = await getOrderStatisticsData();
     res.json(statistics);
   } catch (error) {
-    console.error('Error fetching order statistics:', error);
-    res.status(500).json({ message: 'Failed to fetch order statistics', error: String(error) });
+    console.error("Error fetching order statistics:", error);
+    res
+      .status(500)
+      .json({
+        message: "Failed to fetch order statistics",
+        error: String(error),
+      });
   }
 };
 
@@ -325,41 +360,44 @@ export const getOrderStatistics = async (req: Request, res: Response) => {
 export const exportOrders = async (req: Request, res: Response) => {
   try {
     // Get all orders with user information
-    const ordersData = await db.select({
-      id: orders.id,
-      userId: orders.userId,
-      sessionId: orders.sessionId,
-      total: orders.total,
-      status: orders.status,
-      shippingAddress: orders.shippingAddress,
-      paymentMethod: orders.paymentMethod,
-      cancellationReason: orders.cancellationReason,
-      deliveredAt: orders.deliveredAt,
-      createdAt: orders.createdAt,
-      updatedAt: orders.updatedAt,
-      userName: users.name,
-      userEmail: users.email
-    })
+    const ordersData = await db
+      .select({
+        id: orders.id,
+        userId: orders.userId,
+        sessionId: orders.sessionId,
+        total: orders.total,
+        status: orders.status,
+        shippingAddress: orders.shippingAddress,
+        paymentMethod: orders.paymentMethod,
+        cancellationReason: orders.cancellationReason,
+        trackingId: orders.trackingId,
+        deliveredAt: orders.deliveredAt,
+        createdAt: orders.createdAt,
+        updatedAt: orders.updatedAt,
+        userName: users.name,
+        userEmail: users.email,
+      })
       .from(orders)
       .leftJoin(users, eq(orders.userId, users.id))
       .orderBy(desc(orders.createdAt));
 
     // Get all order items with product details
-    const allOrderItems = await db.select({
-      orderId: orderItems.orderId,
-      productId: orderItems.productId,
-      quantity: orderItems.quantity,
-      price: orderItems.price,
-      productName: products.name,
-      productSku: products.sku,
-      productCategory: products.category
-    })
+    const allOrderItems = await db
+      .select({
+        orderId: orderItems.orderId,
+        productId: orderItems.productId,
+        quantity: orderItems.quantity,
+        price: orderItems.price,
+        productName: products.name,
+        productSku: products.sku,
+        productCategory: products.category,
+      })
       .from(orderItems)
       .leftJoin(products, eq(orderItems.productId, products.id));
 
     // Group order items by order ID
     const itemsByOrderId: Record<number, any[]> = {};
-    allOrderItems.forEach(item => {
+    allOrderItems.forEach((item) => {
       if (!itemsByOrderId[item.orderId]) {
         itemsByOrderId[item.orderId] = [];
       }
@@ -369,23 +407,25 @@ export const exportOrders = async (req: Request, res: Response) => {
         price: item.price,
         productName: item.productName,
         productSku: item.productSku,
-        productCategory: item.productCategory
+        productCategory: item.productCategory,
       });
     });
 
     // Combine orders with their items
-    const ordersWithItems = ordersData.map(order => ({
+    const ordersWithItems = ordersData.map((order) => ({
       ...order,
-      items: itemsByOrderId[order.id] || []
+      items: itemsByOrderId[order.id] || [],
     }));
 
     res.json({
       orders: ordersWithItems,
       exportedAt: new Date().toISOString(),
-      totalOrders: ordersWithItems.length
+      totalOrders: ordersWithItems.length,
     });
   } catch (error) {
-    console.error('Error exporting orders:', error);
-    res.status(500).json({ message: 'Failed to export orders', error: String(error) });
+    console.error("Error exporting orders:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to export orders", error: String(error) });
   }
 };

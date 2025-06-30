@@ -136,6 +136,7 @@ function generateCreateTableSQL(tableName: string, schema: any): string {
   "payment_method" TEXT NOT NULL DEFAULT 'razorpay',
   "discount_id" INTEGER,
   "cancellation_reason" TEXT,
+  "trackingId" TEXT,
   "delivered_at" TIMESTAMP,
   "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
   "updated_at" TIMESTAMP NOT NULL DEFAULT NOW()`;
