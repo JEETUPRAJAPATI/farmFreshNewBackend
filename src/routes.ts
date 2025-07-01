@@ -730,7 +730,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        
         const options = {
           amount: Math.round(amount * 100),
           currency,
@@ -745,7 +744,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             amount: order.amount,
             currency: order.currency,
             keyId: process.env.RAZORPAY_KEY_ID,
-            
           });
         } catch (orderError) {
           console.error("Failed to create Razorpay order:", orderError);
@@ -776,7 +774,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount,
         currency = "INR",
         shippingAddress,
-        
       } = req.body;
 
       console.log("Payment verification request:", {
@@ -786,7 +783,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         razorpayOrderId,
         amount,
         currency,
-        
       });
 
       // Validate required fields
@@ -868,15 +864,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         let result = "";
         for (let i = 0; i < 3; i++) {
-          result += letters.charAt(
-            Math.floor(Math.random() * letters.length)
-          );
+          result += letters.charAt(Math.floor(Math.random() * letters.length));
         }
 
         for (let i = 0; i < 3; i++) {
-          result += numbers.charAt(
-            Math.floor(Math.random() * numbers.length)
-          );
+          result += numbers.charAt(Math.floor(Math.random() * numbers.length));
         }
 
         return result;
@@ -1350,6 +1342,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch delivered orders" });
     }
   });
+
+  //update tracking id
 
   // Submit product rating for delivered order
   app.post(

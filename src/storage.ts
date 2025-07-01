@@ -1289,10 +1289,8 @@ export class DatabaseStorage implements IStorage {
         .where(eq(carts.id, cart.id));
     }
   }
- async deleteuser(email:string): Promise<boolean> {
-    const result = await db
-      .delete(users)
-      .where(eq(users.email, email));
+  async deleteuser(email: string): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.email, email));
     return result.rowCount !== null && result.rowCount > 0;
   }
   private async buildCartWithItems(cart: Cart): Promise<CartWithItems> {
@@ -2085,6 +2083,7 @@ export class DatabaseStorage implements IStorage {
       )
       .orderBy(categories.sortOrder, categories.name);
   }
+
 
   async getCategoryById(id: number): Promise<Category | undefined> {
     const [category] = await db

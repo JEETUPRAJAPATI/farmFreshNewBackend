@@ -356,8 +356,6 @@ class EmailService {
   </body>
   </html>
   `;
-
-
     try {
       const mail = await this.transporter.sendMail({
         from: `"${this.fromName}" <${this.from}>`,
